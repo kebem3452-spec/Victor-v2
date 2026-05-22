@@ -1,0 +1,12 @@
+requests==2.32.3
+pandas==2.2.2
+numpy==1.26.4
+lightgbm==4.3.0
+scikit-learn==1.4.2
+joblib==1.4.2
+streamlit>=1.32.0
+optuna>=3.6.0
+openmeteo-requests>=1.2.0
+requests-cache>=1.2.0
+retry-requests>=2.0.0
+tqdm>=4.66.0

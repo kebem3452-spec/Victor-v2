@@ -1,0 +1,146 @@
+VICTOR V2 — Lancement automatique
+Démarré le 22/05/2026 à 04:50:48
+==================================================
+
+[04:50:48] 🔍 Vérification si la collecte est encore en cours...
+[04:50:48] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[04:55:48] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[05:00:48] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[05:05:48] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[05:10:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[05:15:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[05:20:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[05:25:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[05:30:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[05:35:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[05:40:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[05:45:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[05:50:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[05:55:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[06:00:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[06:05:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[06:10:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[06:15:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[06:20:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[06:25:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[06:30:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[06:35:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[06:40:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[06:45:49] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[06:50:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[06:55:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[07:00:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[07:05:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[07:10:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[07:15:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[07:20:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[07:25:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[07:30:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[07:35:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[07:40:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[07:45:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[07:50:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[07:55:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[08:00:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[08:05:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[08:10:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[08:15:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[08:20:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[08:25:50] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[08:30:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[08:35:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[08:40:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[08:45:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[08:50:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[08:55:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[09:00:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[09:05:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[09:10:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[09:15:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[09:20:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[09:25:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[09:30:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[09:35:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[09:40:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[09:45:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[09:50:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[09:55:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[10:00:51] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[10:05:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[10:10:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[10:15:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[10:20:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[10:25:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[10:30:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[10:35:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[10:40:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[10:45:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[10:50:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[10:55:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[11:00:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[11:05:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[11:10:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[11:15:52] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[11:20:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[11:25:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[11:30:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[11:35:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[11:40:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[11:45:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[11:50:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[11:55:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[12:00:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[12:05:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[12:10:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[12:15:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[12:20:53] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[12:25:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[12:30:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[12:35:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[12:40:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[12:45:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[12:50:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[12:55:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[13:00:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[13:05:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[13:10:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[13:15:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[13:20:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[13:25:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[13:30:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[13:35:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[13:40:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[13:45:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[13:50:54] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[13:55:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[14:00:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[14:05:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[14:10:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[14:15:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[14:20:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[14:25:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[14:30:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[14:35:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[14:40:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[14:45:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[14:50:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[14:55:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[15:00:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[15:05:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[15:10:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[15:15:55] ⏳ Collecte encore en cours... vérification dans 5 minutes
+[15:20:56] ✅ Aucune collecte active détectée — on peut démarrer !
+[15:20:56] 🚀 Lancement de 5 étapes...
+[15:20:56] ⚙️  Démarrage : Feature Engineering (~5 min)
+[17:56:17]   ✅ Feature Engineering terminé en 9321.6s
+[17:56:17] 🧠 Démarrage : Entraînement du modèle (~5 min)
+[17:56:34]   ✅ Entraînement du modèle terminé en 17.1s
+[17:56:34] 🔬 Démarrage : Dataset de simulation (~5 min)
+[17:59:08]   ✅ Dataset de simulation terminé en 153.4s
+[17:59:08] 🎓 Démarrage : Entraînement du Superviseur (~3 min)
+[17:59:10]   ✅ Entraînement du Superviseur terminé en 2.6s
+[17:59:10] 💰 Démarrage : Backtesting ROI (~2 min)
+[17:59:19]   ✅ Backtesting ROI terminé en 8.6s
+[17:59:19] 
+==================================================
+[17:59:19] Terminé : 5/5 étapes réussies

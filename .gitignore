@@ -1,0 +1,20 @@
+# 1. Protection des données et secrets
+.env
+.DS_Store
+*.pkl
+*.json
+*.csv
+data/
+models/
+
+# 2. Python et IDE
+__pycache__/
+*.pyc
+.venv/
+env/
+.vscode/
+.idea/
+
+# 3. Streamlit et logs
+.streamlit/
+*.log
