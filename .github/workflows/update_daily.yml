@@ -1,38 +1,38 @@
-name: Mise à jour quotidienne Victor V2
-
+name: Victor V2 Automation
 on:
   schedule:
-    # 7h UTC tous les matins
-    - cron: '0 7 * * *'
-  workflow_dispatch: # Permet de le lancer manuellement depuis l'interface GitHub
+    - cron: '0 7 * * *'  # Matin : Pronostics
+    - cron: '0 20 * * *' # Soir : Résultats
+  workflow_dispatch:
 
 jobs:
-  update-pmu:
+  matin-pronostics:
+    if: github.event.schedule == '0 7 * * *' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-          
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-        
-      - name: Run PMU Collector
+      - uses: actions/setup-python@v4
+        with: {python-version: '3.10'}
+      - run: pip install -r requirements.txt
+      - name: Run Morning Pipeline
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python 6_maj_quotidienne_3.py
-        
-      - name: Run Feature Engineering
-        run: python 2_feature_engineering_3.py
-        
-      - name: Run Model Retraining
-        run: python 3_entrainer_modele_3.py
-        
-      - name: Upload Models to Supabase
-        # Ici, tu pourrais ajouter un script simple pour pousser les .pkl 
-        # générés vers ton bucket Supabase si tu veux automatiser le déploiement
-        run: echo "Modèles mis à jour localement."
+        run: |
+          python 6_maj_quotidienne_3.py
+          python 2_feature_engineering_3.py
+          python 3_entrainer_modele_3.py
+
+  soir-resultats:
+    if: github.event.schedule == '0 20 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with: {python-version: '3.10'}
+      - run: pip install -r requirements.txt
+      - name: Run Results Collector
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python 12_collecteur_resultats.py

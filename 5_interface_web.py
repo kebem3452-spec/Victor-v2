@@ -1,10 +1,11 @@
 """
-VICTOR V2 — Interface Web v12 (Mobile Native + Navigation Opti)
-===============================================================
-- Menu latéral mobile réactivé (🍔 hamburger menu).
-- Navigation par Réunions (R1, R2...) via des onglets.
-- Courses (C1, C2...) dans des cartes déroulantes (Expanders).
-- HTML sécurisé sans indentation.
+VICTOR V2 — Interface Web v13 (Version Finale Complète)
+=======================================================
+- Mobile Native avec navigation par onglets (Réunions).
+- Filtre Premium intégré (cadenas sur les pronos > 65% pour les non-pro).
+- Affichage automatique des Non-Partants.
+- Affichage de l'arrivée officielle (Résultat) sous le pronostic.
+- Call To Action WhatsApp dynamique.
 """
 
 import streamlit as st
@@ -40,7 +41,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS mis à jour : j'ai supprimé la règle qui cachait le menu sur mobile
+# CSS mis à jour avec les styles WhatsApp, Résultats et Premium
 st.markdown("""<style>
 /* --- DESIGN HEADER DE COURSE --- */
 .course-header-mobile {
@@ -56,70 +57,23 @@ st.markdown("""<style>
 .ch-stats { font-size: 12px; color: #6b7280; margin-top: 4px; }
 .ch-time { font-size: 15px; font-weight: 700; color: #1D9E75; margin-top: 8px; }
 
-/* --- DESIGN LISTE VERTICALE (LE TEMPLATE) --- */
-.horse-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 10px;
-}
-.horse-row {
-    display: flex;
-    align-items: center;
-    background-color: #21252d;
-    border-radius: 8px;
-    padding: 10px 12px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-.h-num {
-    width: 44px;
-    height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 22px;
-    font-weight: 900;
-    border-radius: 6px;
-    margin-right: 14px;
-    color: white;
-    flex-shrink: 0;
-}
-/* Couleurs selon le template */
-.rank-0 { background-color: #1D9E75; } /* 1er: Vert */
-.rank-1, .rank-2 { background-color: #EF9F27; } /* 2e et 3e: Orange */
-.rank-other { background-color: #4a4d55; } /* Autres: Gris */
+/* --- DESIGN LISTE VERTICALE --- */
+.horse-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.horse-row { display: flex; align-items: center; background-color: #21252d; border-radius: 8px; padding: 10px 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+.h-num { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; border-radius: 6px; margin-right: 14px; color: white; flex-shrink: 0; }
 
-.h-info {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    overflow: hidden;
-}
-.h-name { 
-    font-size: 15px; 
-    font-weight: 800; 
-    color: #ffffff; 
-    white-space: nowrap; 
-    overflow: hidden; 
-    text-overflow: ellipsis;
-}
-.h-cote { 
-    font-size: 13px; 
-    color: #a0a5b1; 
-    margin-top: 2px;
-    font-weight: 500;
-}
+.rank-0 { background-color: #1D9E75; } 
+.rank-1, .rank-2 { background-color: #EF9F27; } 
+.rank-other { background-color: #4a4d55; } 
+.rank-lock { background-color: #b00020; } /* Rouge pour le cadenas Premium */
 
-.h-stats {
-    text-align: right;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    flex-shrink: 0;
-    margin-left: 10px;
-}
+.h-info { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+.h-name { font-size: 15px; font-weight: 800; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.h-cote { font-size: 13px; color: #a0a5b1; margin-top: 2px; font-weight: 500; }
+
+.h-stats { text-align: right; display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; margin-left: 10px; }
 .h-pct { font-size: 18px; font-weight: 900; color: #1D9E75; }
+.h-pct-lock { font-size: 16px; font-weight: 900; color: #E24B4A; }
 .h-kelly { font-size: 11px; color: #888; margin-top: 2px; }
 
 /* Badges Superviseur */
@@ -127,6 +81,13 @@ st.markdown("""<style>
 .badge-orange { background:#3d2a0f; color:#EF9F27; padding:4px 12px; border-radius:99px; font-size:12px; font-weight:700; }
 .badge-rouge  { background:#3d0f0f; color:#E24B4A; padding:4px 12px; border-radius:99px; font-size:12px; font-weight:700; }
 .badge-neutre { background:#2d3139; color:#a0a5b1; padding:4px 12px; border-radius:99px; font-size:12px; font-weight:700; }
+
+/* CTA WhatsApp et Résultats */
+.cta-box { background-color: #25D366; padding: 12px; border-radius: 8px; text-align: center; margin-top: 15px; margin-bottom: 5px; }
+.cta-box a { color: white; text-decoration: none; font-weight: 800; font-size: 15px; display: block; }
+.result-box { background-color: #2c313c; border-left: 4px solid #EF9F27; padding: 12px; border-radius: 6px; margin-top: 10px; text-align: center; }
+.result-title { color: #EF9F27; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+.result-val { color: white; font-size: 20px; font-weight: 900; letter-spacing: 2px; margin-top: 4px; }
 </style>""", unsafe_allow_html=True)
 
 BASE_URL       = "https://offline.turfinfo.api.pmu.fr/rest/client/7/programme"
@@ -162,7 +123,7 @@ if not verifier_acces():
 
 nom_abonne     = st.session_state.get("nom", "Abonné")
 jours_restants = st.session_state.get("jours_restants", 0)
-plan           = st.session_state.get("plan", "pro")
+plan           = st.session_state.get("plan", "pro") # Doit être 'pro' ou 'vip' pour voir les fortes confiances
 
 # ─────────────────────────────────────────────
 # MODÈLES ET STATS
@@ -214,6 +175,19 @@ def get_meteo_course(hippodrome, date_str, heure):
         return mod.get_meteo(hippodrome, date_str, heure)
     except Exception:
         return {"temperature": None, "precipitation": 0, "vent_kmh": 0, "terrain_lourd": 0}
+
+@st.cache_data(ttl=300) # Mise en cache 5 minutes
+def get_resultats_jour(date_str):
+    """Récupère les résultats officiels depuis Supabase pour la journée en cours"""
+    try:
+        from auth.supabase_client import get_supabase_client
+        supabase = get_supabase_client()
+        res = supabase.table("historique_courses").select("code_course, resultat_reel").eq("date", date_str).execute()
+        if res.data:
+            return {row["code_course"]: row["resultat_reel"] for row in res.data if row.get("resultat_reel")}
+    except Exception:
+        pass
+    return {}
 
 # ─────────────────────────────────────────────
 # PROGRAMME PMU
@@ -342,7 +316,7 @@ if AUTOREFRESH_DISPO: st_autorefresh(interval=2 * 60 * 60 * 1000, key="ar_victor
 
 with st.sidebar:
     st.markdown(f"### 👋 {nom_abonne}")
-    plan_emoji = {"essentiel":"🥉","pro":"🥇","vip":"💎"}.get(plan,"🎫")
+    plan_emoji = {"essentiel":"🥉","pro":"🥇","vip":"💎"}.get(plan.lower(),"🎫")
     st.caption(f"{plan_emoji} Plan **{plan.upper()}** · {jours_restants}j restants")
     
     st.markdown("---")
@@ -404,6 +378,7 @@ if not courses:
     st.stop()
 
 analyses, non_partant_detecte = calculer_analyses(courses, modeles, stats_cheval, stats_jockey, stats_hippo, date_cible)
+resultats_db = get_resultats_jour(date_cible.strftime("%Y-%m-%d"))
 
 if not analyses:
     st.info("Aucune course ne répond aux critères.")
@@ -423,20 +398,14 @@ with onglet_pronos:
         num_reunion = f"R{snap['course']['num_r']}"
         nom_hippo = snap['course']['hippodrome']
         key_reunion = f"{num_reunion} - {nom_hippo}"
-        
-        if key_reunion not in reunions_dict:
-            reunions_dict[key_reunion] = []
+        if key_reunion not in reunions_dict: reunions_dict[key_reunion] = []
         reunions_dict[key_reunion].append(snap)
         
-    # 2. Trier les réunions (R1 avant R2, etc.)
     reunions_triees = sorted(list(reunions_dict.keys()))
-    
-    # 3. Créer des onglets pour chaque Réunion
     tabs_reunions = st.tabs(reunions_triees)
     
     for idx, nom_reunion in enumerate(reunions_triees):
         with tabs_reunions[idx]:
-            # Trier les courses chronologiquement dans la réunion
             courses_de_reunion = sorted(reunions_dict[nom_reunion], key=lambda x: x['course']['heure'])
             
             for snap in courses_de_reunion:
@@ -446,15 +415,20 @@ with onglet_pronos:
                 mult   = sup.get("multiplicateur_kelly", 1.0)
                 
                 num_c = f"C{c_info['num_c']}"
+                code_pmu = c_info['code_pmu']
                 titre_carte = f"🏁 {num_c} - {c_info['heure']} - {c_info['libelle']}"
                 
-                # 4. Afficher la Course dans un Expander (Carte déroulante fermée par défaut)
                 with st.expander(titre_carte, expanded=False):
                     
-                    # HTML de l'entête collé à gauche pour éviter le bug Markdown
+                    # --- GESTION DES NON-PARTANTS ---
+                    non_partants = c_info['course_raw'].get('chevauxNonPartants', [])
+                    if non_partants:
+                        for np_num in non_partants:
+                            st.error(f"⚠️ N°{np_num} DÉCLARÉ NON PARTANT")
+
                     st.markdown(f"""<div class="course-header-mobile">
 <div class="ch-title">🏆 {c_info['libelle']}</div>
-<div class="ch-subtitle">{c_info['hippodrome']} - {c_info['code_pmu']} - {snap['disc_str']}</div>
+<div class="ch-subtitle">{c_info['hippodrome']} - {code_pmu} - {snap['disc_str']}</div>
 <div class="ch-stats">{c_info['nb_partants']} partants · {c_info['course_raw'].get('distance',0)}m</div>
 <div class="ch-time">Départ à {c_info['heure']}</div>
 <div style="margin-top:10px;">{badge_sup(sup["niveau"])}</div>
@@ -467,24 +441,37 @@ with onglet_pronos:
                     html_list = "<div class='horse-list'>"
                     
                     for i, row in df_t.head(8).iterrows():
-                        if i == 0: rank_class = "rank-0"
-                        elif i in [1, 2]: rank_class = "rank-1"
-                        else: rank_class = "rank-other"
-
-                        cheval_nom = row['cheval']
-                        cote_val = row['cote']
                         confiance = row['confiance']
+                        cote_val = row['cote']
                         mise_k = calculer_mise(bankroll, confiance/100, cote_val, methode_k)['montant_mise'] * mult
+
+                        # --- GESTION DU FILTRE PREMIUM ---
+                        is_locked = (confiance > 65.0) and (plan.lower() not in ['pro', 'vip'])
+
+                        if is_locked:
+                            rank_class = "rank-lock"
+                            cheval_nom = "🔒 ANALYSE RÉSERVÉE"
+                            cote_txt = "Passe au plan PRO"
+                            conf_txt = "<span class='h-pct-lock'>PRO</span>"
+                            mise_txt = "🔒"
+                        else:
+                            if i == 0: rank_class = "rank-0"
+                            elif i in [1, 2]: rank_class = "rank-1"
+                            else: rank_class = "rank-other"
+                            cheval_nom = row['cheval']
+                            cote_txt = f"Cote: {cote_val}"
+                            conf_txt = f"<span class='h-pct'>{confiance:.1f}%</span>"
+                            mise_txt = f"Mise {mise_k:,.0f}"
 
                         html_list += f"""<div class='horse-row'>
 <div class='h-num {rank_class}'>{int(row['num'])}</div>
 <div class='h-info'>
 <div class='h-name'>{cheval_nom}</div>
-<div class='h-cote'>Cote: {cote_val}</div>
+<div class='h-cote'>{cote_txt}</div>
 </div>
 <div class='h-stats'>
-<div class='h-pct'>{confiance:.1f}%</div>
-<div class='h-kelly'>Mise {mise_k:,.0f}</div>
+<div>{conf_txt}</div>
+<div class='h-kelly'>{mise_txt}</div>
 </div>
 </div>"""
                         
@@ -494,9 +481,21 @@ with onglet_pronos:
 </div>"""
                     
                     html_list += "</div>"
-                    
                     st.markdown(html_list, unsafe_allow_html=True)
+                    
+                    # --- CTA WHATSAPP ---
+                    st.markdown(f"""<div class="cta-box">
+<a href="https://chat.whatsapp.com/C94vxJ9VGudDX6UNAva0M1?s=cl&p=a&mlu=4" target="_blank">
+📲 Rejoindre le groupe VIP (+221 76 264 17 51)
+</a>
+</div>""", unsafe_allow_html=True)
 
+                    # --- AFFICHAGE DU RÉSULTAT (S'IL EXISTE) ---
+                    if code_pmu in resultats_db and resultats_db[code_pmu] and resultats_db[code_pmu] != 'None':
+                        st.markdown(f"""<div class="result-box">
+<div class="result-title">Arrivée Officielle</div>
+<div class="result-val">{resultats_db[code_pmu]}</div>
+</div>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════
 # ONGLET 2 : HISTORIQUE
