@@ -4,7 +4,7 @@ from auth.supabase_client import verifier_connexion
 def render_phone_input_login():
     """Sélecteur Afrique + Manuel avec gestion stable des états"""
     africa_codes = {
-        "Sénégal (+221)": "+221", "Mali (+223)": "+223", "Côte d'Ivoire (+225)": "+225",
+       "Sénégal (+221)": "+221", "Mali (+223)": "+223", "Côte d'Ivoire (+225)": "+225",
         "Burkina Faso (+226)": "+226", "Niger (+227)": "+227", "Togo (+228)": "+228",
         "Bénin (+229)": "+229", "Guinée (+224)": "+224", "Mauritanie (+222)": "+222",
         "Gambie (+220)": "+220", "Algérie (+213)": "+213", "Maroc (+212)": "+212",
@@ -28,21 +28,22 @@ def render_phone_input_login():
 
     col1, col2 = st.columns([1, 2])
     with col1:
-        # On utilise une key fixe pour que le choix reste sélectionné
+        # On garde la sélection en mémoire avec une key
         selection = st.selectbox("Pays", list(africa_codes.keys()), index=0, key="login_select_pays")
     
     with col2:
         if africa_codes[selection] == "autre":
-            # Si "Autre", on permet de taper l'indicatif manuellement
+            # Mode Manuel : on sauvegarde la valeur dans session_state pour qu'elle survive au refresh
             prefix = st.text_input("Indicatif", placeholder="+xxx", key="login_manual_prefix")
             num = st.text_input("Numéro", key="login_num_manuel")
         else:
-            # Sinon, on prend l'indicatif du dictionnaire
+            # Mode Afrique : champ désactivé (pour éviter les erreurs)
             prefix = africa_codes[selection]
+            st.text_input("Indicatif (fixe)", value=prefix, disabled=True, key="login_prefix_auto")
             num = st.text_input("Numéro (sans indicatif)", placeholder="77 000 00 00", key="login_num_auto")
             
-    # Nettoyage et formatage
-    clean_prefix = prefix.replace('+', '')
+    # Nettoyage et retour
+    clean_prefix = prefix.replace('+', '').replace(' ', '')
     clean_num = num.replace(' ', '')
     return f"+{clean_prefix}{clean_num}"
 
@@ -60,21 +61,23 @@ def afficher_login(prefill_phone=None):
         # --- LOGIQUE SMART LOGIN ---
         if prefill_phone:
             st.info(f"Bonjour ! Connexion pour : **{prefill_phone}**")
-            telephone = prefill_phone # On force le numéro connu
+            telephone = prefill_phone
         else:
             telephone = render_phone_input_login()
             
         mot_de_passe = st.text_input("🔒 Code secret", type="password", key="login_mdp_field")
 
         if st.button("🚀 Se connecter", use_container_width=True, type="primary"):
-            if len(telephone) < 7 or not mot_de_passe:
-                st.error("Veuillez entrer un numéro et un mot de passe valides.")
+            # Validation minimale : s'assurer qu'on a bien un indicatif et un numéro
+            if len(telephone) < 5 or not mot_de_passe:
+                st.error("Veuillez entrer un numéro complet et un mot de passe.")
             else:
                 with st.spinner("Vérification..."):
                     result = verifier_connexion(telephone, mot_de_passe)
 
                 if result["succes"]:
                     abonne = result["abonne"]
+                    # Sauvegarde session
                     st.session_state["connecte"] = True
                     st.session_state["telephone"] = abonne["telephone"]
                     st.session_state["nom"] = abonne.get("nom", "Abonné")
@@ -82,7 +85,6 @@ def afficher_login(prefill_phone=None):
                     st.session_state["session_token"] = abonne["session_token"]
                     st.session_state["jours_restants"] = abonne["jours_restants"]
                     
-                    # On mémorise pour le prochain retour
                     st.query_params["saved_phone"] = telephone
                     st.rerun()
                 else:
@@ -90,7 +92,7 @@ def afficher_login(prefill_phone=None):
 
         st.markdown("---")
         
-        # Bouton WhatsApp avec message pré-rempli
+        # Bouton WhatsApp
         st.link_button(
             "🔒 J'ai perdu mon mot de passe", 
             "https://wa.me/221762641751?text=Bonjour, j'ai perdu mon mot de passe pour mon compte Victor V2.",
