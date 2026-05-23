@@ -13,3 +13,4 @@ tqdm>=4.66.0
 supabase>=2.3.0
 python-dotenv>=1.0.1
 streamlit-autorefresh==1.0.1
+phonenumbers>=8.13.0
