@@ -2,6 +2,7 @@ import streamlit as st
 from supabase import create_client
 import hashlib
 import time
+from datetime import date, timedelta  # Import nécessaire pour gérer les dates
 
 # Connexion directe à Supabase pour éviter les erreurs d'importation
 @st.cache_resource
@@ -39,15 +40,20 @@ def afficher_inscription():
                     if len(res.data) > 0:
                         st.error("❌ Ce numéro de téléphone est déjà utilisé.")
                     else:
-                        # 2. Inscription avec 3 jours d'essai gratuits (modifiable)
+                        # 2. Calculer la date d'expiration (Aujourd'hui + 3 jours)
+                        date_exp = date.today() + timedelta(days=3)
+                        
+                        # 3. Inscription
                         mdp_hash = hasher_mot_de_passe(password)
                         nouveau_profil = {
                             "nom": nom,
                             "telephone": telephone,
                             "mot_de_passe": mdp_hash,
-                            "plan": "essentiel", # Il n'aura pas accès aux pronos PRO > 65%
-                            "jours_restants": 3
+                            "plan": "essentiel",
+                            "jours_restants": 3,
+                            "date_expiration": date_exp.isoformat() # Envoi de la date au format YYYY-MM-DD
                         }
+                        
                         supabase.table("abonnes").insert(nouveau_profil).execute()
                         st.success("✅ Compte créé avec succès ! Redirection...")
                         time.sleep(2)
