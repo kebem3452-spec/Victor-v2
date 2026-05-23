@@ -328,8 +328,10 @@ with col_titre:
     st.title("🏇 Victor V2")
 with col_refresh:
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🔄 Actualiser"):
-        st.cache_data.clear() # Nettoie tout en cas de gros problème
+    # Au lieu de juste le bouton, protège-le
+if st.session_state.get("nom") == "TON_NOM_ADMIN": # Remplace par ton nom
+    if st.button("🔄 RECALCUL TOTAL (Admin seulement)"):
+        st.cache_data.clear()
         st.rerun()
 
 st.markdown("---")
