@@ -1,0 +1,33 @@
+{
+  "auc": 0.6641,
+  "features": [
+    "confiance_top1",
+    "cote_top1",
+    "ecart_top2",
+    "std_probas",
+    "discipline_code",
+    "distance",
+    "nb_partants",
+    "taux_hippo",
+    "temperature",
+    "precipitation",
+    "vent_kmh",
+    "terrain_lourd"
+  ],
+  "importances": {
+    "confiance_top1": 180.0,
+    "std_probas": 100.0,
+    "cote_top1": 95.0,
+    "taux_hippo": 61.0,
+    "temperature": 59.0,
+    "vent_kmh": 36.0,
+    "ecart_top2": 32.0,
+    "distance": 29.0,
+    "precipitation": 26.0,
+    "nb_partants": 17.0,
+    "discipline_code": 9.0,
+    "terrain_lourd": 0.0
+  },
+  "seuil_confiance": 0.4,
+  "seuil_danger": 0.3
+}
