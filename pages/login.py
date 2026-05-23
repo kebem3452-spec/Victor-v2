@@ -4,25 +4,9 @@ from auth.supabase_client import verifier_connexion
 def render_phone_input_login():
     """Sélecteur Afrique + Manuel avec gestion stable des états"""
     africa_codes = {
-       "Sénégal (+221)": "+221", "Mali (+223)": "+223", "Côte d'Ivoire (+225)": "+225",
+        "Sénégal (+221)": "+221", "Mali (+223)": "+223", "Côte d'Ivoire (+225)": "+225",
         "Burkina Faso (+226)": "+226", "Niger (+227)": "+227", "Togo (+228)": "+228",
         "Bénin (+229)": "+229", "Guinée (+224)": "+224", "Mauritanie (+222)": "+222",
-        "Gambie (+220)": "+220", "Algérie (+213)": "+213", "Maroc (+212)": "+212",
-        "Tunisie (+216)": "+216", "Libye (+218)": "+218", "Égypte (+20)": "+20",
-        "Afrique du Sud (+27)": "+27", "Cameroun (+237)": "+237", "Gabon (+241)": "+241",
-        "Congo (+242)": "+242", "RDC (+243)": "+243", "Angola (+244)": "+244",
-        "Guinée Équatoriale (+240)": "+240", "Guinée-Bissau (+245)": "+245",
-        "Kenya (+254)": "+254", "Ouganda (+256)": "+256", "Rwanda (+250)": "+250",
-        "Tanzanie (+255)": "+255", "Burundi (+257)": "+257", "Djibouti (+253)": "+253",
-        "Éthiopie (+251)": "+251", "Érythrée (+291)": "+291", "Somalie (+252)": "+252",
-        "Soudan (+249)": "+249", "Soudan du Sud (+211)": "+211", "Tchad (+235)": "+235",
-        "République Centrafricaine (+236)": "+236", "Ghana (+233)": "+233",
-        "Libéria (+231)": "+231", "Sierra Leone (+232)": "+232", "Cap-Vert (+238)": "+238",
-        "Sao Tomé-et-Principe (+239)": "+239", "Maurice (+230)": "+230",
-        "Seychelles (+248)": "+248", "Comores (+269)": "+269", "Madagascar (+261)": "+261",
-        "Malawi (+265)": "+265", "Mozambique (+258)": "+258", "Zambie (+260)": "+260",
-        "Zimbabwe (+263)": "+263", "Namibie (+264)": "+264", "Botswana (+267)": "+267",
-        "Eswatini (+268)": "+268", "Lesotho (+266)": "+266",
         "Autre (Saisir manuellement)": "autre"
     }
 

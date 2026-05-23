@@ -97,37 +97,24 @@ DOSSIER_DATA   = "data"
 DISCIPLINE_MAP_INV = {0:"CROSS",1:"OBSTACLE",2:"PLAT",3:"TROT_ATTELE",4:"TROT_MONTE"}
 
 # ─────────────────────────────────────────────
-# SESSION & ROUTING
+# SESSION & ROUTING (ACCÈS LIBRE DÉSACTIVÉ)
 # ─────────────────────────────────────────────
 
-if "connecte" not in st.session_state:
-    st.session_state["connecte"] = False
+# On force la session pour tout le monde (accès libre d'urgence)
+st.session_state["connecte"] = True
+st.session_state["nom"] = "Visiteur"
+st.session_state["plan"] = "pro"
+st.session_state["jours_restants"] = 999
 
-if st.query_params.get("page") == "admin":
-    from pages.admin import afficher_admin
-    afficher_admin()
-    st.stop()
-
-def verifier_acces():
-    if not st.session_state.get("connecte"):
-        return False
-    return verifier_session(
-        st.session_state.get("telephone", ""),
-        st.session_state.get("session_token", "")
-    )
-
-if not verifier_acces():
-    from pages.login import afficher_login
-    afficher_login()
-    st.stop()
-
-nom_abonne     = st.session_state.get("nom", "Abonné")
-jours_restants = st.session_state.get("jours_restants", 0)
-plan           = st.session_state.get("plan", "pro") # Doit être 'pro' ou 'vip' pour voir les fortes confiances
+# DÉFINITION DES VARIABLES POUR LA SIDEBAR
+nom_abonne = st.session_state.get("nom", "Visiteur")
+jours_restants = st.session_state.get("jours_restants", 999)
+plan = st.session_state.get("plan", "pro")
 
 # ─────────────────────────────────────────────
 # MODÈLES ET STATS
 # ─────────────────────────────────────────────
+# ... (le reste de ton code continue normalement ici)
 
 @st.cache_resource
 def charger_modeles(version=0):
