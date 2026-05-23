@@ -2,7 +2,9 @@
 VICTOR V2 — Interface Web v13 (Version Finale Complète - PROD)
 ==============================================================
 - Accès Libre (Mode Urgence) activé.
-- Pronostics 100% Figés par jour (ignorant les fluctuations de cotes).
+- Pronostics 100% Figés après 09h00 (Sénégal/GMT).
+- Messages de transparence (Maturation des cotes vs Pronos Définitifs).
+- Sécurité pour ne pas figer les courses de "Demain" prématurément.
 - Retrait automatique et dynamique des Non-Partants dans le classement.
 - Affichage de l'arrivée officielle (Résultat) sous le pronostic.
 """
@@ -15,7 +17,7 @@ import joblib
 import json
 import os
 import datetime
-from datetime import date
+from datetime import date, timezone
 
 from utils import construire_features, charger_stats_historiques
 from kelly import calculer_mise
@@ -173,7 +175,7 @@ def get_resultats_jour(date_str):
     return {}
 
 # ─────────────────────────────────────────────
-# PROGRAMME PMU (Mis à jour toutes les 10 mins pour les Non-Partants)
+# PROGRAMME PMU (Mis à jour toutes les 10 mins)
 # ─────────────────────────────────────────────
 @st.cache_data(ttl=600) 
 def get_programme(date_cible):
@@ -218,12 +220,11 @@ def get_programme(date_cible):
     return courses
 
 # ─────────────────────────────────────────────
-# PRONOSTICS FIGÉS (Le Cerveau)
+# PRONOSTICS (GEL INTELLIGENT INTÉGRÉ)
 # ─────────────────────────────────────────────
-# Le TTL de 86400 fige les calculs pour toute la journée.
-# Les "_" devant _courses empêchent le recalcul même si les cotes changent.
+# Le paramètre periode_cache dicte si on fige ou non le calcul
 @st.cache_data(ttl=86400)
-def calculer_analyses(_courses, _modeles, _stats_cheval, _stats_jockey, _stats_hippo, date_cible):
+def calculer_analyses(_courses, _modeles, _stats_cheval, _stats_jockey, _stats_hippo, date_cible, periode_cache):
     analyses = []
     for c in _courses:
         disc_str = c["course_raw"].get("discipline", "PLAT")
@@ -334,23 +335,44 @@ with col_refresh:
 st.markdown("---")
 
 with st.spinner("Chargement des courses..."):
-    courses = get_programme(date_cible) # Données fraîches (cotes & non-partants)
-    dict_fresh_courses = {c["code_pmu"]: c for c in courses} # Dictionnaire pour recherche rapide
+    courses = get_programme(date_cible) # Données fraîches
+    dict_fresh_courses = {c["code_pmu"]: c for c in courses} 
 
 if mode_affichage == "Sélection Afrique":
     courses = [c for c in courses if c["code_pmu"] in codes_actifs]
 
 if not courses:
-    st.warning("⚠️ Aucune course disponible.")
+    st.warning("⚠️ Aucune course disponible pour cette date.")
     st.stop()
 
-# On récupère les analyses FIGÉES de la journée
-analyses, _ = calculer_analyses(courses, modeles, stats_cheval, stats_jockey, stats_hippo, date_cible)
-# On récupère les résultats officiels de la journée (S'ils existent)
+# ─────────────────────────────────────────────
+# LOGIQUE DU GEL INTELLIGENT (SMART FREEZE) ET AVERTISSEMENTS
+# ─────────────────────────────────────────────
+# Récupération de l'heure en temps universel pour éviter les décalages de serveur (Sénégal = GMT+0)
+heure_actuelle = datetime.datetime.now(timezone.utc).hour
+
+if date_cible < d0:
+    # HIERS : Toujours figé
+    periode_cache = "fige_definitif"
+elif date_cible == d0:
+    # AUJOURD'HUI : Fige à partir de 09h00
+    if heure_actuelle < 9:
+        periode_cache = f"maturation_{heure_actuelle}h"
+        st.warning("🕒 **PHASE DE MATURATION DES COTES**\n\nEntre minuit et 09h00, les cotes PMU ne sont pas stables. L'IA s'ajuste en temps réel. **Pour une précision maximale, attendez 09h00 pour consulter les pronostics définitifs.**")
+    else:
+        periode_cache = "fige_definitif"
+        st.success("🔒 **PRONOSTICS DÉFINITIFS**\n\nL'intelligence artificielle a verrouillé ses classements sur les cotes matures de 09h00. Seuls les chevaux déclarés non-partants seront désormais retirés.")
+else:
+    # DEMAIN : Jamais figé, recalcul permanent
+    periode_cache = f"demain_maturation_{heure_actuelle}h"
+    st.info("📅 **COURSES DE DEMAIN**\n\nLes cotes provisoires sont en cours de formation. Les pronostics définitifs seront disponibles demain matin à 09h00.")
+
+# On génère ou récupère les analyses avec la clé de cache calculée
+analyses, _ = calculer_analyses(courses, modeles, stats_cheval, stats_jockey, stats_hippo, date_cible, periode_cache)
 resultats_db = get_resultats_jour(date_cible.strftime("%Y-%m-%d"))
 
 if not analyses:
-    st.info("Aucune course ne répond aux critères.")
+    st.info("Aucune course ne répond aux critères d'analyse.")
     st.stop()
 
 onglet_pronos, onglet_historique = st.tabs(["🎯 Pronostics", "📅 Historique"])
@@ -360,7 +382,6 @@ onglet_pronos, onglet_historique = st.tabs(["🎯 Pronostics", "📅 Historique"
 # ══════════════════════════════════════════════
 with onglet_pronos:
     
-    # 1. Regrouper les analyses par Réunion
     reunions_dict = {}
     for snap in analyses:
         num_reunion = f"R{snap['course']['num_r']}"
@@ -379,11 +400,11 @@ with onglet_pronos:
             for snap in courses_de_reunion:
                 code_pmu = snap['course']['code_pmu']
                 
-                # RÉCUPÉRATION DES DONNÉES FRAICHES (Pour les non-partants en temps réel)
+                # RÉCUPÉRATION DES DONNÉES FRAICHES (Pour les non-partants)
                 fresh_course = dict_fresh_courses.get(code_pmu, snap["course"])
-                c_info = fresh_course # On utilise les infos fraîches (heure, partants...)
+                c_info = fresh_course 
                 
-                df_t   = snap["df_tri"] # Le dataframe FIGÉ
+                df_t   = snap["df_tri"] 
                 sup    = snap["sup_avis"]
                 mult   = sup.get("multiplicateur_kelly", 1.0)
                 
@@ -392,7 +413,7 @@ with onglet_pronos:
                 
                 with st.expander(titre_carte, expanded=False):
                     
-                    # --- GESTION DYNAMIQUE DES NON-PARTANTS ---
+                    # --- GESTION DES NON-PARTANTS ---
                     non_partants = c_info['course_raw'].get('chevauxNonPartants', [])
                     if non_partants:
                         for np_num in non_partants:
@@ -407,14 +428,12 @@ with onglet_pronos:
 </div>""", unsafe_allow_html=True)
 
                     if not snap["cotes_ont_valeur"]:
-                        st.warning("ℹ️ Cotes non disponibles lors du calcul. Basé sur statistiques.")
+                        st.warning("ℹ️ Cotes non disponibles lors du calcul initial.")
 
-                    # --- FILTRAGE DU DATAFRAME FIGÉ ---
-                    # On retire les chevaux déclarés non partants pour faire remonter les autres
+                    # --- FILTRAGE DU DATAFRAME FIGÉ (Retrait des absents) ---
                     np_ints = [int(x) for x in non_partants]
                     df_t_actifs = df_t[~df_t['num'].astype(int).isin(np_ints)]
 
-                    # DEBUT DE LA LISTE VERTICALE
                     html_list = "<div class='horse-list'>"
                     
                     for i, row in df_t_actifs.head(8).reset_index(drop=True).iterrows():
@@ -422,7 +441,6 @@ with onglet_pronos:
                         cote_val = row['cote']
                         mise_k = calculer_mise(bankroll, confiance/100, cote_val, methode_k)['montant_mise'] * mult
 
-                        # --- GESTION DU FILTRE PREMIUM ---
                         is_locked = (confiance > 65.0) and (plan.lower() not in ['pro', 'vip'])
 
                         if is_locked:
@@ -437,7 +455,7 @@ with onglet_pronos:
                             else: rank_class = "rank-other"
                             
                             cheval_nom = row['cheval']
-                            cote_txt = f"Cote matin: {cote_val}" # Précision pour le parieur
+                            cote_txt = f"Cote matin: {cote_val}" 
                             conf_txt = f"<span class='h-pct'>{confiance:.1f}%</span>"
                             mise_txt = f"Mise {mise_k:,.0f}"
 
@@ -468,7 +486,7 @@ with onglet_pronos:
 </a>
 </div>""", unsafe_allow_html=True)
 
-                    # --- AFFICHAGE DU RÉSULTAT (S'IL EXISTE DANS LA BDD) ---
+                    # --- AFFICHAGE DU RÉSULTAT ---
                     if code_pmu in resultats_db and resultats_db[code_pmu] and resultats_db[code_pmu] != 'None':
                         st.markdown(f"""<div class="result-box">
 <div class="result-title">Arrivée Officielle</div>
