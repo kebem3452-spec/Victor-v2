@@ -1,11 +1,10 @@
 """
-VICTOR V2 — Interface Web v13 (Version Finale Complète)
-=======================================================
-- Mobile Native avec navigation par onglets (Réunions).
-- Filtre Premium intégré (cadenas sur les pronos > 65% pour les non-pro).
-- Affichage automatique des Non-Partants.
+VICTOR V2 — Interface Web v13 (Version Finale Complète - PROD)
+==============================================================
+- Accès Libre (Mode Urgence) activé.
+- Pronostics 100% Figés par jour (ignorant les fluctuations de cotes).
+- Retrait automatique et dynamique des Non-Partants dans le classement.
 - Affichage de l'arrivée officielle (Résultat) sous le pronostic.
-- Call To Action WhatsApp dynamique.
 """
 
 import streamlit as st
@@ -41,7 +40,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS mis à jour avec les styles WhatsApp, Résultats et Premium
+# ─────────────────────────────────────────────
+# CSS - DESIGN MOBILE, BADGES ET RÉSULTATS
+# ─────────────────────────────────────────────
 st.markdown("""<style>
 /* --- DESIGN HEADER DE COURSE --- */
 .course-header-mobile {
@@ -65,7 +66,7 @@ st.markdown("""<style>
 .rank-0 { background-color: #1D9E75; } 
 .rank-1, .rank-2 { background-color: #EF9F27; } 
 .rank-other { background-color: #4a4d55; } 
-.rank-lock { background-color: #b00020; } /* Rouge pour le cadenas Premium */
+.rank-lock { background-color: #b00020; } 
 
 .h-info { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
 .h-name { font-size: 15px; font-weight: 800; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -99,23 +100,19 @@ DISCIPLINE_MAP_INV = {0:"CROSS",1:"OBSTACLE",2:"PLAT",3:"TROT_ATTELE",4:"TROT_MO
 # ─────────────────────────────────────────────
 # SESSION & ROUTING (ACCÈS LIBRE DÉSACTIVÉ)
 # ─────────────────────────────────────────────
-
-# On force la session pour tout le monde (accès libre d'urgence)
 st.session_state["connecte"] = True
 st.session_state["nom"] = "Visiteur"
 st.session_state["plan"] = "pro"
 st.session_state["jours_restants"] = 999
 
-# DÉFINITION DES VARIABLES POUR LA SIDEBAR
+# Définition sécurisée pour la sidebar
 nom_abonne = st.session_state.get("nom", "Visiteur")
 jours_restants = st.session_state.get("jours_restants", 999)
 plan = st.session_state.get("plan", "pro")
 
 # ─────────────────────────────────────────────
-# MODÈLES ET STATS
+# CHARGEMENT DES MODÈLES & STATS
 # ─────────────────────────────────────────────
-# ... (le reste de ton code continue normalement ici)
-
 @st.cache_resource
 def charger_modeles(version=0):
     meta_c = os.path.join(DOSSIER_MODELS, "features.json")
@@ -163,9 +160,8 @@ def get_meteo_course(hippodrome, date_str, heure):
     except Exception:
         return {"temperature": None, "precipitation": 0, "vent_kmh": 0, "terrain_lourd": 0}
 
-@st.cache_data(ttl=300) # Mise en cache 5 minutes
+@st.cache_data(ttl=300) # Mise à jour des arrivées toutes les 5 minutes
 def get_resultats_jour(date_str):
-    """Récupère les résultats officiels depuis Supabase pour la journée en cours"""
     try:
         from auth.supabase_client import get_supabase_client
         supabase = get_supabase_client()
@@ -177,10 +173,9 @@ def get_resultats_jour(date_str):
     return {}
 
 # ─────────────────────────────────────────────
-# PROGRAMME PMU
+# PROGRAMME PMU (Mis à jour toutes les 10 mins pour les Non-Partants)
 # ─────────────────────────────────────────────
-
-@st.cache_data(ttl=7200)
+@st.cache_data(ttl=600) 
 def get_programme(date_cible):
     date_str = date_cible.strftime("%d%m%Y")
     courses  = []
@@ -189,8 +184,8 @@ def get_programme(date_cible):
         if r.status_code != 200:
             return []
         for reunion in r.json().get("programme", {}).get("reunions", []):
-            num_r      = reunion.get("numOfficiel") or reunion.get("numOrdre")
-            hippodrome = reunion.get("hippodrome", {}).get("libelleCourt", "?")
+            num_r       = reunion.get("numOfficiel") or reunion.get("numOrdre")
+            hippodrome  = reunion.get("hippodrome", {}).get("libelleCourt", "?")
             for course in reunion.get("courses", []):
                 num_c       = course.get("numOrdre")
                 nb_partants = course.get("nombreDeclaresPartants", 0)
@@ -223,28 +218,19 @@ def get_programme(date_cible):
     return courses
 
 # ─────────────────────────────────────────────
-# PRONOSTICS FIGÉS
+# PRONOSTICS FIGÉS (Le Cerveau)
 # ─────────────────────────────────────────────
-
-def calculer_analyses(courses, modeles, stats_cheval, stats_jockey, stats_hippo, date_cible):
-    cle_session = f"analyses_{date_cible.isoformat()}"
-    nb_session  = f"nb_partants_{date_cible.isoformat()}"
-    nb_actuels = {c["code_pmu"]: c["nb_partants"] for c in courses}
-
-    if (cle_session in st.session_state and
-            nb_session in st.session_state and
-            st.session_state[nb_session] == nb_actuels):
-        return st.session_state[cle_session], False
-
-    recalcul = cle_session in st.session_state
+# Le TTL de 86400 fige les calculs pour toute la journée.
+# Les "_" devant _courses empêchent le recalcul même si les cotes changent.
+@st.cache_data(ttl=86400)
+def calculer_analyses(_courses, _modeles, _stats_cheval, _stats_jockey, _stats_hippo, date_cible):
     analyses = []
-
-    for c in courses:
+    for c in _courses:
         disc_str = c["course_raw"].get("discipline", "PLAT")
         disc_num = {"PLAT":2,"TROT_ATTELE":3,"TROT_MONTE":4, "OBSTACLE":1,"CROSS":0}.get(disc_str, 2)
-        model, feats, nom_mod = choisir_modele(modeles, disc_num)
+        model, feats, nom_mod = choisir_modele(_modeles, disc_num)
 
-        df = construire_features(c["participants"], c["course_raw"], c["hippodrome"], stats_cheval, stats_jockey, stats_hippo)
+        df = construire_features(c["participants"], c["course_raw"], c["hippodrome"], _stats_cheval, _stats_jockey, _stats_hippo)
         for col in feats:
             if col not in df.columns: df[col] = 0.0
         feats_ok = [f for f in feats if f in df.columns]
@@ -258,6 +244,8 @@ def calculer_analyses(courses, modeles, stats_cheval, stats_jockey, stats_hippo,
             "cote"     : df["cote"].tolist(),
             "confiance": probas.tolist(),
         }).sort_values("confiance", ascending=False).reset_index(drop=True)
+
+        if df_tri.empty: continue
 
         score_val = float(df_tri.iloc[0]["confiance"]) / (np.log1p(float(df_tri.iloc[0]["cote"])) + 1)
         meteo = get_meteo_course(c["hippodrome"], date_cible.strftime("%Y-%m-%d"), c["heure"])
@@ -281,10 +269,7 @@ def calculer_analyses(courses, modeles, stats_cheval, stats_jockey, stats_hippo,
             "score_val": score_val, "meteo": meteo, "sup_avis": sup_avis,
             "commentaires": commentaires[:2], "cotes_ont_valeur": any(ct != 20.0 for ct in df_tri["cote"].tolist()[:5])
         })
-
-    st.session_state[cle_session] = analyses
-    st.session_state[nb_session]  = nb_actuels
-    return analyses, recalcul
+    return analyses, False
 
 def badge_sup(niveau):
     if niveau == "confiant": return '<span class="badge-vert">🟢 Confiant</span>'
@@ -292,13 +277,10 @@ def badge_sup(niveau):
     if niveau == "danger": return '<span class="badge-rouge">🔴 Danger</span>'
     return '<span class="badge-neutre">⚪ Neutre</span>'
 
-
 # ─────────────────────────────────────────────
 # SIDEBAR
 # ─────────────────────────────────────────────
-
 if "model_version" not in st.session_state: st.session_state.model_version = 0
-
 if AUTOREFRESH_DISPO: st_autorefresh(interval=2 * 60 * 60 * 1000, key="ar_victor")
 
 with st.sidebar:
@@ -338,24 +320,22 @@ if modeles is None:
     st.stop()
 
 # ─────────────────────────────────────────────
-# TITRE ET DONNÉES
+# TITRE ET CHARGEMENT DES DONNÉES
 # ─────────────────────────────────────────────
-
 col_titre, col_refresh = st.columns([4, 1])
 with col_titre:
     st.title("🏇 Victor V2")
 with col_refresh:
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("🔄 Actualiser"):
-        st.cache_data.clear()
-        for k in list(st.session_state.keys()):
-            if k.startswith("analyses_") or k.startswith("nb_partants_"): del st.session_state[k]
+        st.cache_data.clear() # Nettoie tout en cas de gros problème
         st.rerun()
 
 st.markdown("---")
 
 with st.spinner("Chargement des courses..."):
-    courses = get_programme(date_cible)
+    courses = get_programme(date_cible) # Données fraîches (cotes & non-partants)
+    dict_fresh_courses = {c["code_pmu"]: c for c in courses} # Dictionnaire pour recherche rapide
 
 if mode_affichage == "Sélection Afrique":
     courses = [c for c in courses if c["code_pmu"] in codes_actifs]
@@ -364,7 +344,9 @@ if not courses:
     st.warning("⚠️ Aucune course disponible.")
     st.stop()
 
-analyses, non_partant_detecte = calculer_analyses(courses, modeles, stats_cheval, stats_jockey, stats_hippo, date_cible)
+# On récupère les analyses FIGÉES de la journée
+analyses, _ = calculer_analyses(courses, modeles, stats_cheval, stats_jockey, stats_hippo, date_cible)
+# On récupère les résultats officiels de la journée (S'ils existent)
 resultats_db = get_resultats_jour(date_cible.strftime("%Y-%m-%d"))
 
 if not analyses:
@@ -376,10 +358,9 @@ onglet_pronos, onglet_historique = st.tabs(["🎯 Pronostics", "📅 Historique"
 # ══════════════════════════════════════════════
 # ONGLET 1 : ORGANISATION PAR RÉUNION (R1, R2...)
 # ══════════════════════════════════════════════
-
 with onglet_pronos:
     
-    # 1. Regrouper les analyses par Réunion (R1, R2, etc.)
+    # 1. Regrouper les analyses par Réunion
     reunions_dict = {}
     for snap in analyses:
         num_reunion = f"R{snap['course']['num_r']}"
@@ -396,18 +377,22 @@ with onglet_pronos:
             courses_de_reunion = sorted(reunions_dict[nom_reunion], key=lambda x: x['course']['heure'])
             
             for snap in courses_de_reunion:
-                c_info = snap["course"]
-                df_t   = snap["df_tri"]
+                code_pmu = snap['course']['code_pmu']
+                
+                # RÉCUPÉRATION DES DONNÉES FRAICHES (Pour les non-partants en temps réel)
+                fresh_course = dict_fresh_courses.get(code_pmu, snap["course"])
+                c_info = fresh_course # On utilise les infos fraîches (heure, partants...)
+                
+                df_t   = snap["df_tri"] # Le dataframe FIGÉ
                 sup    = snap["sup_avis"]
                 mult   = sup.get("multiplicateur_kelly", 1.0)
                 
                 num_c = f"C{c_info['num_c']}"
-                code_pmu = c_info['code_pmu']
                 titre_carte = f"🏁 {num_c} - {c_info['heure']} - {c_info['libelle']}"
                 
                 with st.expander(titre_carte, expanded=False):
                     
-                    # --- GESTION DES NON-PARTANTS ---
+                    # --- GESTION DYNAMIQUE DES NON-PARTANTS ---
                     non_partants = c_info['course_raw'].get('chevauxNonPartants', [])
                     if non_partants:
                         for np_num in non_partants:
@@ -422,12 +407,17 @@ with onglet_pronos:
 </div>""", unsafe_allow_html=True)
 
                     if not snap["cotes_ont_valeur"]:
-                        st.warning("ℹ️ Cotes non disponibles. Basé sur statistiques.")
+                        st.warning("ℹ️ Cotes non disponibles lors du calcul. Basé sur statistiques.")
+
+                    # --- FILTRAGE DU DATAFRAME FIGÉ ---
+                    # On retire les chevaux déclarés non partants pour faire remonter les autres
+                    np_ints = [int(x) for x in non_partants]
+                    df_t_actifs = df_t[~df_t['num'].astype(int).isin(np_ints)]
 
                     # DEBUT DE LA LISTE VERTICALE
                     html_list = "<div class='horse-list'>"
                     
-                    for i, row in df_t.head(8).iterrows():
+                    for i, row in df_t_actifs.head(8).reset_index(drop=True).iterrows():
                         confiance = row['confiance']
                         cote_val = row['cote']
                         mise_k = calculer_mise(bankroll, confiance/100, cote_val, methode_k)['montant_mise'] * mult
@@ -445,8 +435,9 @@ with onglet_pronos:
                             if i == 0: rank_class = "rank-0"
                             elif i in [1, 2]: rank_class = "rank-1"
                             else: rank_class = "rank-other"
+                            
                             cheval_nom = row['cheval']
-                            cote_txt = f"Cote: {cote_val}"
+                            cote_txt = f"Cote matin: {cote_val}" # Précision pour le parieur
                             conf_txt = f"<span class='h-pct'>{confiance:.1f}%</span>"
                             mise_txt = f"Mise {mise_k:,.0f}"
 
@@ -462,7 +453,7 @@ with onglet_pronos:
 </div>
 </div>"""
                         
-                        if i == 4 and len(df_t) > 5:
+                        if i == 4 and len(df_t_actifs) > 5:
                             html_list += """<div style="text-align:center; font-size:12px; color:#1D9E75; margin: 8px 0; font-weight:bold; letter-spacing:1px;">
 --- CHEVAUX SUIVANTS ---
 </div>"""
@@ -477,7 +468,7 @@ with onglet_pronos:
 </a>
 </div>""", unsafe_allow_html=True)
 
-                    # --- AFFICHAGE DU RÉSULTAT (S'IL EXISTE) ---
+                    # --- AFFICHAGE DU RÉSULTAT (S'IL EXISTE DANS LA BDD) ---
                     if code_pmu in resultats_db and resultats_db[code_pmu] and resultats_db[code_pmu] != 'None':
                         st.markdown(f"""<div class="result-box">
 <div class="result-title">Arrivée Officielle</div>
@@ -487,7 +478,6 @@ with onglet_pronos:
 # ══════════════════════════════════════════════
 # ONGLET 2 : HISTORIQUE
 # ══════════════════════════════════════════════
-
 with onglet_historique:
     st.subheader("📅 Historique des courses")
     chemin = os.path.join(DOSSIER_DATA, "raw_courses.csv")
