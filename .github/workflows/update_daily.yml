@@ -2,10 +2,11 @@ name: Victor V2 - Automatisation Intégrale
 
 on:
   schedule:
-    - cron: '0 7 * * *'
-    - cron: '0 20 * * *'
-    - cron: '30 7 * * 0'
-    - cron: '0 6 1 * *'
+    - cron: '0 7 * * *'    # Matin : collecte + features
+    - cron: '5 9 * * *'    # 09h05 UTC : sauvegarde pronostics définitifs
+    - cron: '0 20 * * *'   # Soir : résultats officiels
+    - cron: '30 7 * * 0'   # Dimanche : réentraînement IA
+    - cron: '0 6 1 * *'    # 1er du mois : optimisation Optuna
   workflow_dispatch:
     inputs:
       job:
@@ -15,6 +16,7 @@ on:
         type: choice
         options:
           - matin
+          - pronostics
           - soir
           - dimanche
           - mensuel
@@ -24,6 +26,9 @@ permissions:
 
 jobs:
 
+  # ───────────────────────────────────────────────────────────
+  # 1. MATIN 07h00 : collecte données + feature engineering
+  # ───────────────────────────────────────────────────────────
   matin-pronostics:
     if: |
       github.event.schedule == '0 7 * * *' ||
@@ -50,6 +55,30 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "🤖 [Auto] Maj des statistiques du matin"
           git push origin main
 
+  # ───────────────────────────────────────────────────────────
+  # 2. 09h05 UTC : sauvegarde pronostics définitifs
+  #    (après le gel des cotes à 09h00 Sénégal = 09h00 UTC)
+  # ───────────────────────────────────────────────────────────
+  sauvegarder-pronostics:
+    if: |
+      github.event.schedule == '5 9 * * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'pronostics')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - run: pip install -r requirements.txt
+      - name: Sauvegarde Pronostics Définitifs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python 15_sauvegarder_pronostics.py
+
+  # ───────────────────────────────────────────────────────────
+  # 3. SOIR 20h00 : résultats officiels
+  # ───────────────────────────────────────────────────────────
   soir-resultats:
     if: |
       github.event.schedule == '0 20 * * *' ||
@@ -74,6 +103,9 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "🤖 [Auto] Arrivées du soir"
           git push origin main
 
+  # ───────────────────────────────────────────────────────────
+  # 4. DIMANCHE 07h30 : réentraînement IA hebdomadaire
+  # ───────────────────────────────────────────────────────────
   dimanche-reentrainement:
     if: |
       github.event.schedule == '30 7 * * 0' ||
@@ -101,6 +133,9 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "🏆 [IA] Modèles hebdomadaires mis à jour"
           git push origin main
 
+  # ───────────────────────────────────────────────────────────
+  # 5. 1ER DU MOIS 06h00 : optimisation Optuna + backtesting
+  # ───────────────────────────────────────────────────────────
   mensuel-optimisation:
     if: |
       github.event.schedule == '0 6 1 * *' ||
