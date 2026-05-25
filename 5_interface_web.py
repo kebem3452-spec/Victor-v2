@@ -7,10 +7,11 @@ VICTOR V2 — Interface Web v13.2
 - Résultats officiels depuis Supabase
 - Bouton "Forcer recalcul" SUPPRIMÉ (déplacé vers admin)
 - Routing login/inscription/app unifié
-- Session persistante via query_params
+- Session persistante via localStorage
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import pandas as pd
 import numpy as np
@@ -88,10 +89,8 @@ DOSSIER_DATA       = "data"
 DISCIPLINE_MAP_INV = {0:"CROSS",1:"OBSTACLE",2:"PLAT",3:"TROT_ATTELE",4:"TROT_MONTE"}
 
 # ─────────────────────────────────────────────
-# ROUTING : admin / login / inscription / app
+# ROUTING : admin
 # ─────────────────────────────────────────────
-
-# Route admin conservée intacte
 if st.query_params.get("page") == "admin":
     from pages.admin import afficher_admin
     afficher_admin()
@@ -100,7 +99,6 @@ if st.query_params.get("page") == "admin":
 # ─────────────────────────────────────────────
 # ACCÈS LIBRE — phase test
 # ─────────────────────────────────────────────
-# Pour activer l'authentification : mettre ACCES_LIBRE = False
 ACCES_LIBRE = False
 
 if ACCES_LIBRE:
@@ -109,39 +107,26 @@ if ACCES_LIBRE:
     st.session_state["plan"]           = "pro"
     st.session_state["jours_restants"] = 999
 else:
-    # ← AJOUT : Restauration automatique de session depuis query_params
-    # Si l'utilisateur n'est pas connecté en session mais qu'on a ses infos dans l'URL
     if not st.session_state.get("connecte"):
-        saved_phone = st.query_params.get("saved_phone", "")
-        saved_token = st.query_params.get("saved_token", "")
-        if saved_phone and saved_token:
-            # Vérifier que le token est toujours valide côté Supabase
-            if verifier_session(saved_phone, saved_token):
-                # Restaurer la session sans redemander le mot de passe
-                st.session_state["connecte"]       = True
-                st.session_state["telephone"]      = saved_phone
-                st.session_state["session_token"]  = saved_token
-                # Les champs nom/plan/jours_restants seront à leur valeur par défaut
-                # car on ne les a pas stockés dans query_params (données sensibles)
-                st.session_state["nom"]            = st.session_state.get("nom", "Abonné")
-                st.session_state["plan"]           = st.session_state.get("plan", "pro")
-                st.session_state["jours_restants"] = st.session_state.get("jours_restants", 999)
-            else:
-                # Token invalide ou expiré : nettoyer les query_params et rediriger
-                st.query_params.clear()
-                st.switch_page("pages/login.py")
-        else:
-            # Pas de token sauvegardé : rediriger vers login
-            st.switch_page("pages/login.py")
+        # Pas de session active → retour login
+        # Le login.py gère la restauration depuis localStorage
+        st.switch_page("pages/login.py")
+        st.stop()
     else:
-        # Déjà connecté en session : vérifier que le token est toujours valide
+        # Session active : vérifier que le token est toujours valide
         if not verifier_session(
             st.session_state.get("telephone", ""),
             st.session_state.get("session_token", "")
         ):
+            # Token invalide : effacer localStorage + session + rediriger
+            components.html("""
+            <script>
+            localStorage.removeItem('victor_phone');
+            localStorage.removeItem('victor_token');
+            </script>
+            """, height=0)
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
-            st.query_params.clear()
             st.rerun()
 
 nom_abonne     = st.session_state.get("nom", "Visiteur")
@@ -331,7 +316,7 @@ def badge_sup(niveau):
 
 
 # ─────────────────────────────────────────────
-# SIDEBAR — bouton forcer recalcul RETIRÉ
+# SIDEBAR
 # ─────────────────────────────────────────────
 
 if "model_version" not in st.session_state:
@@ -370,9 +355,15 @@ with st.sidebar:
     if not ACCES_LIBRE:
         if st.button("🚪 Déconnexion"):
             deconnecter(st.session_state.get("telephone",""))
+            # Effacer localStorage
+            components.html("""
+            <script>
+            localStorage.removeItem('victor_phone');
+            localStorage.removeItem('victor_token');
+            </script>
+            """, height=0)
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
-            st.query_params.clear()
             st.rerun()
 
 # ─────────────────────────────────────────────
@@ -464,7 +455,6 @@ with onglet_pronos:
 
                 with st.expander(titre_carte, expanded=False):
 
-                    # Détection non-partants (3 méthodes)
                     np_pmu  = fresh_course.get('course_raw', {}).get('chevauxNonPartants', [])
                     np_flag = [
                         p.get('numPmu', p.get('num'))
