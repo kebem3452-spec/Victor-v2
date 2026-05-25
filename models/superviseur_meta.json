@@ -1,5 +1,5 @@
 {
-  "auc": 0.6641,
+  "auc": 0.6643,
   "features": [
     "confiance_top1",
     "cote_top1",
@@ -15,17 +15,17 @@
     "terrain_lourd"
   ],
   "importances": {
-    "confiance_top1": 180.0,
-    "std_probas": 100.0,
-    "cote_top1": 95.0,
-    "taux_hippo": 61.0,
-    "temperature": 59.0,
-    "vent_kmh": 36.0,
-    "ecart_top2": 32.0,
-    "distance": 29.0,
-    "precipitation": 26.0,
-    "nb_partants": 17.0,
-    "discipline_code": 9.0,
+    "confiance_top1": 194.0,
+    "cote_top1": 115.0,
+    "std_probas": 70.0,
+    "ecart_top2": 58.0,
+    "temperature": 52.0,
+    "distance": 49.0,
+    "vent_kmh": 23.0,
+    "nb_partants": 19.0,
+    "precipitation": 19.0,
+    "taux_hippo": 18.0,
+    "discipline_code": 7.0,
     "terrain_lourd": 0.0
   },
   "seuil_confiance": 0.4,
