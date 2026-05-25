@@ -1,15 +1,6 @@
 """
 VICTOR V2 — Interface Web v13.2
-================================
-- Accès Libre activé (phase test)
-- Pronostics figés après 09h00 UTC
-- Non-partants détectés automatiquement
-- Résultats officiels depuis Supabase
-- Bouton "Forcer recalcul" SUPPRIMÉ (déplacé vers admin)
-- Routing login/inscription/app unifié
-- Session persistante via query_params
 """
-
 import streamlit as st
 import requests
 import pandas as pd
@@ -24,18 +15,7 @@ from utils import construire_features, charger_stats_historiques
 from kelly import calculer_mise
 from auth.supabase_client import verifier_session, deconnecter
 
-try:
-    from superviseur_utils import avis_superviseur_depuis_analyse
-    SUPERVISEUR_DISPO = True
-except Exception:
-    SUPERVISEUR_DISPO = False
-
-try:
-    from streamlit_autorefresh import st_autorefresh
-    AUTOREFRESH_DISPO = True
-except ImportError:
-    AUTOREFRESH_DISPO = False
-
+# Configuration de la page
 st.set_page_config(
     page_title="Victor V2 - Pronostics PMU",
     page_icon="🏇",
@@ -43,89 +23,40 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.markdown("""<style>
-.course-header-mobile {
-    background-color: #1a1c23;
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 16px;
-    text-align: center;
-    border: 1px solid #2d3139;
-}
-.ch-title { font-size: 16px; font-weight: 800; color: #ffffff; text-transform: uppercase; margin-bottom: 4px; }
-.ch-subtitle { font-size: 13px; color: #a0a5b1; font-weight: 600; }
-.ch-stats { font-size: 12px; color: #6b7280; margin-top: 4px; }
-.ch-time { font-size: 15px; font-weight: 700; color: #1D9E75; margin-top: 8px; }
-.horse-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.horse-row { display: flex; align-items: center; background-color: #21252d; border-radius: 8px; padding: 10px 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-.h-num { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; border-radius: 6px; margin-right: 14px; color: white; flex-shrink: 0; }
-.rank-0 { background-color: #1D9E75; }
-.rank-1, .rank-2 { background-color: #EF9F27; }
-.rank-other { background-color: #4a4d55; }
-.rank-lock { background-color: #b00020; }
-.h-info { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
-.h-name { font-size: 15px; font-weight: 800; color: #ffffff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.h-cote { font-size: 13px; color: #a0a5b1; margin-top: 2px; font-weight: 500; }
-.h-stats { text-align: right; display: flex; flex-direction: column; justify-content: center; flex-shrink: 0; margin-left: 10px; }
-.h-pct { font-size: 18px; font-weight: 900; color: #1D9E75; }
-.h-pct-lock { font-size: 16px; font-weight: 900; color: #E24B4A; }
-.h-kelly { font-size: 11px; color: #888; margin-top: 2px; }
-.badge-vert   { background:#0f3d2e; color:#1D9E75; padding:4px 12px; border-radius:99px; font-size:12px; font-weight:700; }
-.badge-orange { background:#3d2a0f; color:#EF9F27; padding:4px 12px; border-radius:99px; font-size:12px; font-weight:700; }
-.badge-rouge  { background:#3d0f0f; color:#E24B4A; padding:4px 12px; border-radius:99px; font-size:12px; font-weight:700; }
-.badge-neutre { background:#2d3139; color:#a0a5b1; padding:4px 12px; border-radius:99px; font-size:12px; font-weight:700; }
-.cta-box { background-color: #25D366; padding: 12px; border-radius: 8px; text-align: center; margin-top: 15px; margin-bottom: 5px; }
-.cta-box a { color: white; text-decoration: none; font-weight: 800; font-size: 15px; display: block; }
-.result-box { background-color: #2c313c; border-left: 4px solid #EF9F27; padding: 12px; border-radius: 6px; margin-top: 10px; text-align: center; }
-.result-title { color: #EF9F27; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-.result-val { color: white; font-size: 20px; font-weight: 900; letter-spacing: 2px; margin-top: 4px; }
-</style>""", unsafe_allow_html=True)
-
-BASE_URL           = "https://offline.turfinfo.api.pmu.fr/rest/client/7/programme"
-HEADERS            = {"User-Agent": "Mozilla/5.0"}
-DOSSIER_MODELS     = "models"
-DOSSIER_DATA       = "data"
-DISCIPLINE_MAP_INV = {0:"CROSS",1:"OBSTACLE",2:"PLAT",3:"TROT_ATTELE",4:"TROT_MONTE"}
-
 # ─────────────────────────────────────────────
-# ROUTING : admin / login / inscription / app
+# ROUTING UNIQUE & SIMPLE
 # ─────────────────────────────────────────────
 
-# Route admin conservée intacte
+# 1. Vérification Admin
 if st.query_params.get("page") == "admin":
     from pages.admin import afficher_admin
     afficher_admin()
     st.stop()
 
-# ─────────────────────────────────────────────
-# ACCÈS LIBRE — phase test
-# ─────────────────────────────────────────────
-# Pour activer l'authentification : mettre ACCES_LIBRE = False
-ACCES_LIBRE = False
+# 2. Gestion de l'accès libre et redirection forcée
+ACCES_LIBRE = False 
 
-if ACCES_LIBRE:
-    st.session_state["connecte"]       = True
-    st.session_state["nom"]            = "Visiteur"
-    st.session_state["plan"]           = "pro"
-    st.session_state["jours_restants"] = 999
-else:
-    # ✅ CORRECTION DU ROUTING ICI :
-    # Si l'utilisateur n'est pas connecté, on redirige vers le vrai fichier login.py
+if not ACCES_LIBRE:
     if not st.session_state.get("connecte"):
+        # Redirection directe vers la page officielle dans /pages
         st.switch_page("pages/login.py")
-    else:
-        # Vérifier que le token est toujours valide
-        if not verifier_session(
-            st.session_state.get("telephone", ""),
-            st.session_state.get("session_token", "")
-        ):
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
+    
+    # Vérifier si la session est toujours valide
+    if not verifier_session(
+        st.session_state.get("telephone", ""),
+        st.session_state.get("session_token", "")
+    ):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.switch_page("pages/login.py")
 
+# Si on est ici, c'est qu'on est connecté
 nom_abonne     = st.session_state.get("nom", "Visiteur")
 jours_restants = st.session_state.get("jours_restants", 999)
 plan           = st.session_state.get("plan", "pro")
+
+# [ICI : RESTE DE TON CODE (Modeles, Programme, etc.) NE PAS CHANGER]
+# ... (Gardez tout ton code existant à partir d'ici jusqu'à la fin du fichier) ...
 
 # ─────────────────────────────────────────────
 # MODÈLES & STATS
