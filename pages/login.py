@@ -111,7 +111,6 @@ def restaurer_session_depuis_url() -> bool:
     ✅ SESSION PERSISTANTE
     Si l'utilisateur a déjà un token sauvegardé dans l'URL,
     on le reconnecte automatiquement sans qu'il ait à retaper son mot de passe.
-    Comme un cookie — il revient sur le site et il est déjà connecté.
     """
     saved_phone = st.query_params.get("saved_phone", "")
     saved_token = st.query_params.get("saved_token", "")
@@ -120,15 +119,12 @@ def restaurer_session_depuis_url() -> bool:
         return False
 
     try:
-        # Vérifier que le token est toujours valide dans Supabase
         valide = verifier_session(saved_phone, saved_token)
         if not valide:
-            # Token expiré ou invalide — effacer les query params
             st.query_params.pop("saved_phone", None)
             st.query_params.pop("saved_token", None)
             return False
 
-        # Récupérer les infos de l'abonné
         from auth.supabase_client import get_client
         from datetime import date
         client  = get_client()
@@ -146,7 +142,6 @@ def restaurer_session_depuis_url() -> bool:
         if jours_restants < 0:
             return False
 
-        # Restaurer la session
         st.session_state["connecte"]       = True
         st.session_state["telephone"]      = saved_phone
         st.session_state["nom"]            = abonne.get("nom", "Abonné")
@@ -160,7 +155,6 @@ def restaurer_session_depuis_url() -> bool:
 
 
 def afficher_login(prefill_phone=None):
-    # ✅ Essayer de restaurer la session automatiquement
     if restaurer_session_depuis_url():
         st.rerun()
         return
@@ -168,15 +162,15 @@ def afficher_login(prefill_phone=None):
     st.markdown("""
     <style>
     .login-title { font-size:2.5rem; font-weight:700; color:#1D9E75; text-align:center; }
-    .login-sub   { font-size:1rem; color:#888; text-align:center; margin-bottom:2rem; }
+    .login-sub   { font-size:1rem; color:#888; text-align:center; margin-bottom:1rem; }
+    .stButton>button { margin-top: 5px; } /* Rapprocher les boutons */
     </style>
     """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 4, 1])
     with col2:
         st.markdown('<div class="login-title">🏇 VICTOR V2</div>', unsafe_allow_html=True)
-        st.markdown('<div class="login-sub">Intelligence Artificielle PMU</div>',
-                    unsafe_allow_html=True)
+        st.markdown('<div class="login-sub">Intelligence Artificielle PMU</div>', unsafe_allow_html=True)
 
         if prefill_phone:
             st.info(f"Connexion pour : **{prefill_phone}**")
@@ -184,10 +178,12 @@ def afficher_login(prefill_phone=None):
         else:
             telephone = render_phone_input_login()
 
-        mot_de_passe = st.text_input(
-            "🔒 Code secret", type="password", key="login_mdp"
-        )
+        mot_de_passe = st.text_input("🔒 Code secret", type="password", key="login_mdp")
 
+        # Espace réduit avant les boutons
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Bouton Connexion
         if st.button("🚀 Se connecter", use_container_width=True, type="primary"):
             if len(telephone) < 8 or not mot_de_passe:
                 st.error("⚠️ Remplissez tous les champs.")
@@ -204,7 +200,6 @@ def afficher_login(prefill_phone=None):
                     st.session_state["session_token"]  = abonne["session_token"]
                     st.session_state["jours_restants"] = abonne["jours_restants"]
 
-                    # ✅ Sauvegarder dans l'URL pour se souvenir
                     st.query_params["saved_phone"] = telephone
                     st.query_params["saved_token"] = abonne["session_token"]
 
@@ -212,26 +207,17 @@ def afficher_login(prefill_phone=None):
                 else:
                     st.error(f"❌ {result['message']}")
 
-        st.markdown("---")
+        # Bouton inscription direct (CORRIGÉ avec switch_page)
+        if st.button("📝 Créer un compte gratuit", use_container_width=True):
+            st.switch_page("pages/inscription.py")
 
-        # ✅ Mot de passe oublié → WhatsApp +221762641751
+        # Lien Mot de passe oublié (plus compact)
         wa_msg = "Bonjour, j'ai perdu mon mot de passe Victor V2. Mon numéro est : " + telephone
         wa_url = f"https://wa.me/221762641751?text={wa_msg.replace(' ', '%20')}"
-        st.link_button(
-            "🔑 Mot de passe oublié → WhatsApp",
-            wa_url,
-            use_container_width=True
-        )
-
-        st.markdown("---")
-
-        # Bouton inscription
-        if st.button("📝 Créer un compte gratuit", use_container_width=True):
-            st.session_state["page_auth"] = "inscription"
-            st.rerun()
+        st.link_button("🔑 Mot de passe oublié ?", wa_url, use_container_width=True)
 
         st.markdown(
-            "<div style='text-align:center;font-size:11px;color:#888;margin-top:8px'>"
+            "<div style='text-align:center;font-size:11px;color:#888;margin-top:15px'>"
             "Support : <strong>+221 76 264 17 51</strong>"
             "</div>",
             unsafe_allow_html=True
