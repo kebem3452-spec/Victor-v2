@@ -165,9 +165,16 @@ def collecter_resultats_jour(d: date = None) -> dict:
 
 
 if __name__ == "__main__":
+    import sys
     print("🏁 VICTOR V2 — COLLECTEUR DE RÉSULTATS")
     print("=" * 50)
-    resultats = collecter_resultats_jour()
+    if len(sys.argv) > 1:
+        from datetime import datetime
+        d_force = datetime.strptime(sys.argv[1], "%Y-%m-%d").date()
+        print(f"📅 Date forcée : {d_force}")
+        resultats = collecter_resultats_jour(d_force)
+    else:
+        resultats = collecter_resultats_jour()
     print(f"\n{'='*50}")
     print(f"✅ {len(resultats)} course(s) avec résultats officiels")
     if resultats:
