@@ -7,11 +7,10 @@ VICTOR V2 — Interface Web v13.2
 - Résultats officiels depuis Supabase
 - Bouton "Forcer recalcul" SUPPRIMÉ (déplacé vers admin)
 - Routing login/inscription/app unifié
-- Session persistante via localStorage
+- Session persistante via query_params URL
 """
 
 import streamlit as st
-import streamlit.components.v1 as components
 import requests
 import pandas as pd
 import numpy as np
@@ -107,9 +106,9 @@ if ACCES_LIBRE:
     st.session_state["plan"]           = "pro"
     st.session_state["jours_restants"] = 999
 else:
+    # ── Si pas de session active → retour login
+    # login.py gère la restauration depuis l'URL (?t=TOKEN&p=TELEPHONE)
     if not st.session_state.get("connecte"):
-        # Pas de session active → retour login
-        # Le login.py gère la restauration depuis localStorage
         st.switch_page("pages/login.py")
         st.stop()
     else:
@@ -118,13 +117,7 @@ else:
             st.session_state.get("telephone", ""),
             st.session_state.get("session_token", "")
         ):
-            # Token invalide : effacer localStorage + session + rediriger
-            components.html("""
-            <script>
-            localStorage.removeItem('victor_phone');
-            localStorage.removeItem('victor_token');
-            </script>
-            """, height=0)
+            # Token invalide : vider la session et retourner au login
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
@@ -354,16 +347,11 @@ with st.sidebar:
     st.markdown("---")
     if not ACCES_LIBRE:
         if st.button("🚪 Déconnexion"):
-            deconnecter(st.session_state.get("telephone",""))
-            # Effacer localStorage
-            components.html("""
-            <script>
-            localStorage.removeItem('victor_phone');
-            localStorage.removeItem('victor_token');
-            </script>
-            """, height=0)
+            deconnecter(st.session_state.get("telephone", ""))
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
+            # Effacer les params de l'URL → le favori ne reconnectera plus
+            st.query_params.clear()
             st.rerun()
 
 # ─────────────────────────────────────────────
