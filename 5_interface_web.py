@@ -91,10 +91,7 @@ DISCIPLINE_MAP_INV = {0:"CROSS",1:"OBSTACLE",2:"PLAT",3:"TROT_ATTELE",4:"TROT_MO
 # ROUTING : admin / login / inscription / app
 # ─────────────────────────────────────────────
 
-if "page_auth" not in st.session_state:
-    st.session_state["page_auth"] = "login"
-
-# Route admin
+# Route admin conservée intacte
 if st.query_params.get("page") == "admin":
     from pages.admin import afficher_admin
     afficher_admin()
@@ -112,15 +109,10 @@ if ACCES_LIBRE:
     st.session_state["plan"]           = "pro"
     st.session_state["jours_restants"] = 999
 else:
-    # Vérifier la session
+    # ✅ CORRECTION DU ROUTING ICI :
+    # Si l'utilisateur n'est pas connecté, on redirige vers le vrai fichier login.py
     if not st.session_state.get("connecte"):
-        if st.session_state["page_auth"] == "inscription":
-            from pages.inscription import afficher_inscription
-            afficher_inscription()
-        else:
-            from pages.login import afficher_login
-            afficher_login()
-        st.stop()
+        st.switch_page("pages/login.py")
     else:
         # Vérifier que le token est toujours valide
         if not verifier_session(
