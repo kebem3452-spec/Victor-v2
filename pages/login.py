@@ -1,10 +1,10 @@
 """
 VICTOR V2 — pages/login.py
-Session persistante via localStorage (Streamlit Cloud compatible)
+Session persistante via query_params dans l'URL (Streamlit Cloud compatible)
+Aucun JS, aucun iframe, aucun localStorage.
 """
 
 import streamlit as st
-import streamlit.components.v1 as components
 from auth.supabase_client import verifier_connexion, verifier_session
 
 AFRICA_CODES = {
@@ -45,59 +45,62 @@ def render_phone_input_login():
     clean = f"{prefix.replace('+','').replace(' ','')}{num.replace(' ','')}"
     return f"+{clean}"
 
+
 def afficher_login():
-    # ── PRIORITÉ 1 : session_state déjà connecté ──
+
+    # ── PRIORITÉ 1 : session_state déjà active (même session navigateur) ──
     if st.session_state.get("connecte"):
         st.switch_page("5_interface_web.py")
         return
 
-    # ── PRIORITÉ 2 : lire localStorage et pousser vers Streamlit via query_params ──
-    # Ce composant lit le localStorage du navigateur.
-    # S'il trouve un token, il recharge la page avec ?lsp=PHONE&lst=TOKEN dans l'URL.
-    # Streamlit reçoit alors ces params et peut les lire normalement.
-    components.html("""
-    <script>
-    (function() {
-        const phone = localStorage.getItem('victor_phone');
-        const token = localStorage.getItem('victor_token');
-        if (phone && token) {
-            const url = new URL(window.parent.location.href);
-            const already = url.searchParams.get('lsp');
-            if (!already) {
-                url.searchParams.set('lsp', phone);
-                url.searchParams.set('lst', token);
-                window.parent.location.replace(url.toString());
-            }
-        }
-    })();
-    </script>
-    """, height=0)
+    # ── PRIORITÉ 2 : token dans l'URL → restauration automatique ──
+    # L'URL ressemble à : https://...streamlit.app/?t=TOKEN&p=TELEPHONE
+    # L'utilisateur met cette URL en favori après sa 1ère connexion.
+    # Streamlit Cloud conserve les query_params dans l'URL → ça survit au rafraîchissement.
+    url_token = st.query_params.get("t", "")
+    url_phone = st.query_params.get("p", "")
 
-    # ── PRIORITÉ 3 : lire les params injectés par le script ci-dessus ──
-    lsp = st.query_params.get("lsp", "")
-    lst = st.query_params.get("lst", "")
-    if lsp and lst:
-        if verifier_session(lsp, lst):
+    if url_token and url_phone:
+        # Vérifier avec Supabase que le token est toujours valide
+        if verifier_session(url_phone, url_token):
+            # Récupérer les infos complètes de l'abonné
+            try:
+                from auth.supabase_client import get_client
+                from datetime import date
+                client = get_client()
+                res = client.table("abonnes").select(
+                    "nom, plan, date_expiration"
+                ).eq("telephone", url_phone).execute()
+                if res.data:
+                    abonne = res.data[0]
+                    expiration = date.fromisoformat(abonne["date_expiration"])
+                    jours_restants = (expiration - date.today()).days
+                    nom  = abonne.get("nom", "Abonné")
+                    plan = abonne.get("plan", "pro")
+                else:
+                    jours_restants = 999
+                    nom  = "Abonné"
+                    plan = "pro"
+            except Exception:
+                jours_restants = 999
+                nom  = "Abonné"
+                plan = "pro"
+
+            # Restaurer la session complète
             st.session_state["connecte"]       = True
-            st.session_state["telephone"]      = lsp
-            st.session_state["session_token"]  = lst
-            st.session_state["nom"]            = "Abonné"
-            st.session_state["plan"]           = "pro"
-            st.session_state["jours_restants"] = 999
-            st.query_params.clear()
+            st.session_state["telephone"]      = url_phone
+            st.session_state["session_token"]  = url_token
+            st.session_state["nom"]            = nom
+            st.session_state["plan"]           = plan
+            st.session_state["jours_restants"] = jours_restants
             st.switch_page("5_interface_web.py")
             return
         else:
-            # Token expiré : effacer localStorage et afficher le formulaire
-            components.html("""
-            <script>
-            localStorage.removeItem('victor_phone');
-            localStorage.removeItem('victor_token');
-            </script>
-            """, height=0)
+            # Token expiré ou invalide → effacer l'URL et afficher le formulaire
             st.query_params.clear()
+            st.warning("⚠️ Session expirée. Veuillez vous reconnecter.")
 
-    # ── PRIORITÉ 4 : afficher le formulaire de connexion ──
+    # ── PRIORITÉ 3 : afficher le formulaire de connexion ──
     st.markdown("""<style>
     .login-title { font-size:2.5rem; font-weight:700; color:#1D9E75; text-align:center; }
     .login-sub { font-size:1rem; color:#888; text-align:center; margin-bottom:1rem; }
@@ -127,15 +130,10 @@ def afficher_login():
                     st.session_state["session_token"]  = abonne["session_token"]
                     st.session_state["jours_restants"] = abonne["jours_restants"]
 
-                    # ── Sauvegarder dans localStorage du navigateur ──
-                    token_safe  = abonne["session_token"].replace("'", "\\'")
-                    phone_safe  = abonne["telephone"].replace("'", "\\'")
-                    components.html(f"""
-                    <script>
-                    localStorage.setItem('victor_phone', '{phone_safe}');
-                    localStorage.setItem('victor_token', '{token_safe}');
-                    </script>
-                    """, height=0)
+                    # Sauvegarder token + téléphone dans l'URL
+                    # → l'utilisateur met cette URL en favori = connexion automatique à vie
+                    st.query_params["t"] = abonne["session_token"]
+                    st.query_params["p"] = abonne["telephone"]
 
                     st.switch_page("5_interface_web.py")
                 else:
@@ -147,6 +145,7 @@ def afficher_login():
         wa_msg = "Bonjour, j'ai perdu mon mot de passe Victor V2. Mon numéro est : " + telephone
         wa_url = f"https://wa.me/221762641751?text={wa_msg.replace(' ', '%20')}"
         st.link_button("🔑 Mot de passe oublié ?", wa_url, use_container_width=True)
+
 
 if __name__ == "__main__":
     afficher_login()
