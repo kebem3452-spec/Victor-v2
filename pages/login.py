@@ -6,7 +6,9 @@ Optimisé pour la production.
 import streamlit as st
 from auth.supabase_client import verifier_connexion, verifier_session
 
-# Liste des pays (conservée pour ne pas casser ton UI)
+# ─────────────────────────────────────────────
+# Liste des pays (conservée)
+# ─────────────────────────────────────────────
 AFRICA_CODES = {
     "Mali (+223)": "+223", "Sénégal (+221)": "+221", "Côte d'Ivoire (+225)": "+225",
     "Burkina Faso (+226)": "+226", "Niger (+227)": "+227", "Togo (+228)": "+228",
@@ -46,6 +48,11 @@ def render_phone_input_login():
     return f"+{clean}"
 
 def afficher_login():
+    # ✅ PROTECTION : Si déjà connecté, on sort immédiatement
+    if st.session_state.get("connecte"):
+        st.switch_page("5_interface_web.py")
+        return
+
     st.markdown("""<style>.login-title { font-size:2.5rem; font-weight:700; color:#1D9E75; text-align:center; }
     .login-sub { font-size:1rem; color:#888; text-align:center; margin-bottom:1rem; }</style>""", unsafe_allow_html=True)
 
@@ -76,7 +83,7 @@ def afficher_login():
                     st.query_params["saved_phone"] = telephone
                     st.query_params["saved_token"] = abonne["session_token"]
                     
-                    # Redirection vers la racine pour rafraîchir le contexte de l'app
+                    # ✅ Redirection forcée
                     st.switch_page("5_interface_web.py")
                 else:
                     st.error(f"❌ {result['message']}")
