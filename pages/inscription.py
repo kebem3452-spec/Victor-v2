@@ -1,5 +1,5 @@
 """
-VICTOR V2 — inscription.py
+VICTOR V2 — pages/inscription.py
 ===========================
 - 56 pays africains + "Autre" avec champ libre
 - Commence par +223 (Mali) comme premier choix
@@ -121,6 +121,7 @@ def afficher_inscription():
     <style>
     .ins-title { font-size:2rem; font-weight:700; color:#1D9E75; text-align:center; }
     .ins-sub   { font-size:1rem; color:#888; text-align:center; margin-bottom:1.5rem; }
+    .stButton>button { margin-top: 5px; } /* Rapprocher les boutons */
     </style>
     """, unsafe_allow_html=True)
 
@@ -133,6 +134,8 @@ def afficher_inscription():
         telephone    = render_phone_input("ins_prefix", "ins_num", "ins_pays")
         password     = st.text_input("🔒 Créer un mot de passe", type="password", key="ins_pwd")
         password2    = st.text_input("🔒 Confirmer le mot de passe", type="password", key="ins_pwd2")
+
+        st.markdown("<br>", unsafe_allow_html=True)
 
         if st.button("✅ Créer mon compte", use_container_width=True, type="primary"):
             if not nom.strip():
@@ -190,20 +193,22 @@ def afficher_inscription():
 
                 st.success(f"✅ Bienvenue {nom.strip()} ! Redirection...")
                 time.sleep(1)
-                st.rerun()
+                
+                # CORRECTION : Retourner explicitement à la page principale de l'app
+                st.switch_page("5_interface_web.py")
 
             except Exception as e:
                 st.error(f"❌ Erreur : {e}")
 
-        st.markdown("---")
         st.markdown(
-            "<div style='text-align:center;font-size:12px;color:#888'>"
+            "<div style='text-align:center;font-size:12px;color:#888;margin-top:15px'>"
             "Déjà un compte ?</div>",
             unsafe_allow_html=True
         )
+        
+        # CORRECTION : Utiliser switch_page pour retourner au login
         if st.button("🔑 Se connecter", use_container_width=True):
-            st.session_state["page_auth"] = "login"
-            st.rerun()
+            st.switch_page("pages/login.py")
 
 
 if __name__ == "__main__":
