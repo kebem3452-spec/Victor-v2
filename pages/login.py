@@ -48,11 +48,31 @@ def render_phone_input_login():
     return f"+{clean}"
 
 def afficher_login():
-    # ✅ PROTECTION : Si déjà connecté, on sort immédiatement
+    # ✅ PRIORITÉ 1 : Si déjà connecté en session, rediriger immédiatement
     if st.session_state.get("connecte"):
         st.switch_page("5_interface_web.py")
         return
 
+    # ✅ PRIORITÉ 2 : Vérifier les query_params sauvegardés (session persistante)
+    # Même si le site s'ouvre sur login, on vérifie si un token valide existe dans l'URL
+    saved_phone = st.query_params.get("saved_phone", "")
+    saved_token = st.query_params.get("saved_token", "")
+    if saved_phone and saved_token:
+        if verifier_session(saved_phone, saved_token):
+            # Token valide : restaurer la session et rediriger sans afficher le formulaire
+            st.session_state["connecte"]       = True
+            st.session_state["telephone"]      = saved_phone
+            st.session_state["session_token"]  = saved_token
+            st.session_state["nom"]            = st.session_state.get("nom", "Abonné")
+            st.session_state["plan"]           = st.session_state.get("plan", "pro")
+            st.session_state["jours_restants"] = st.session_state.get("jours_restants", 999)
+            st.switch_page("5_interface_web.py")
+            return
+        else:
+            # Token expiré ou invalide : nettoyer et afficher le formulaire normalement
+            st.query_params.clear()
+
+    # ✅ PRIORITÉ 3 : Afficher le formulaire de connexion normalement
     st.markdown("""<style>.login-title { font-size:2.5rem; font-weight:700; color:#1D9E75; text-align:center; }
     .login-sub { font-size:1rem; color:#888; text-align:center; margin-bottom:1rem; }</style>""", unsafe_allow_html=True)
 
@@ -79,10 +99,10 @@ def afficher_login():
                     st.session_state["plan"]           = abonne.get("plan", "pro")
                     st.session_state["session_token"]  = abonne["session_token"]
                     st.session_state["jours_restants"] = abonne["jours_restants"]
-                    
+
                     st.query_params["saved_phone"] = telephone
                     st.query_params["saved_token"] = abonne["session_token"]
-                    
+
                     # ✅ Redirection forcée
                     st.switch_page("5_interface_web.py")
                 else:
