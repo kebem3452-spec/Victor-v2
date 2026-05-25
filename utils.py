@@ -1,7 +1,12 @@
 """
-VICTOR V2 — utils.py : Boîte à outils commune v3
+VICTOR V2 — utils.py : Boîte à outils commune v4
 =================================================
 SOURCE UNIQUE DE VÉRITÉ — Ne jamais dupliquer ces fonctions.
+
+NOUVEAUTÉ v4 :
+- extraire_stats_musique_discipline() : filtre la musique par discipline
+  Un cheval en PLAT aujourd'hui → on ignore ses résultats en TROT et vice versa
+- Correction majeure de précision des pronostics
 """
 
 import numpy as np
@@ -33,9 +38,19 @@ DISCIPLINE_MAP = {
     "PLAT": 2, "TROT_ATTELE": 3, "TROT_MONTE": 4, "OBSTACLE": 1, "CROSS": 0
 }
 
-# ---------------------------------------------
+# Lettres de discipline dans la musique PMU
+# Chaque lettre indique le type de course dans la musique
+LETTRES_DISCIPLINE = {
+    "PLAT"        : set(),           # Pas de lettre = Plat par défaut
+    "TROT_ATTELE" : {"a"},           # a = Attelé
+    "TROT_MONTE"  : {"m", "p"},      # m = Monté, p = aussi Monté (ancienne notation)
+    "OBSTACLE"    : {"h", "s", "c"}, # h = Haies, s = Steeple, c = Cross-country
+    "CROSS"       : {"c", "x"},      # c = Cross, x = Cross-country
+}
+
+# ─────────────────────────────────────────────
 # EXTRACTION DE LA COTE DEPUIS L'API PMU
-# ---------------------------------------------
+# ─────────────────────────────────────────────
 
 def extraire_cote_api(p: dict) -> float:
     """
@@ -62,9 +77,9 @@ def extraire_cote_api(p: dict) -> float:
     return 20.0
 
 
-# ---------------------------------------------
-# DECODAGE MUSIQUE
-# ---------------------------------------------
+# ─────────────────────────────────────────────
+# DÉCODAGE MUSIQUE
+# ─────────────────────────────────────────────
 
 def decoder_musique(musique: str) -> float:
     if not isinstance(musique, str) or musique == "":
@@ -94,7 +109,7 @@ def decoder_musique(musique: str) -> float:
 
 
 def extraire_stats_musique(musique: str) -> dict:
-    """Version enrichie : retourne 5 features depuis la musique."""
+    """Version sans filtre discipline — utilisée pour le feature engineering historique."""
     defaut = {"forme_recente": 5.0, "forme_10": 5.0,
                "meilleure_place": 10, "regularite": 3.0, "momentum": 0.0}
 
@@ -117,19 +132,100 @@ def extraire_stats_musique(musique: str) -> dict:
     if not places:
         return defaut
 
+    return _calculer_stats_depuis_places(places)
+
+
+def extraire_stats_musique_discipline(musique: str, discipline: str) -> dict:
+    """
+    ✅ NOUVELLE FONCTION v4 — Filtre la musique par discipline.
+
+    Explication simple :
+    La musique d'un cheval ressemble à : "1a3p2h5"
+    - "1a" = 1er place en course Attelée
+    - "3p" = 3ème place en course Montée
+    - "2h" = 2ème place en course Haies
+    - "5"  = 5ème place en Plat (pas de lettre = Plat)
+
+    Si le cheval court en PLAT aujourd'hui, on ne garde que
+    les résultats sans lettre (Plat). Les autres sont ignorés.
+
+    C'est comme évaluer un footballeur uniquement sur ses matchs
+    de foot, pas ses matchs de rugby.
+    """
+    defaut = {"forme_recente": 5.0, "forme_10": 5.0,
+               "meilleure_place": 10, "regularite": 3.0, "momentum": 0.0}
+
+    if not isinstance(musique, str) or musique == "":
+        return defaut
+
+    # Lettres qui correspondent à la discipline cible
+    disc_upper   = discipline.upper() if discipline else "PLAT"
+    lettres_cible = LETTRES_DISCIPLINE.get(disc_upper, set())
+
+    # Toutes les lettres de discipline connues (pour savoir si c'est une autre discipline)
+    toutes_lettres = set()
+    for lettres in LETTRES_DISCIPLINE.values():
+        toutes_lettres.update(lettres)
+
+    places = []
+    i = 0
+    while i < len(musique):
+        c = musique[i]
+        if c.isdigit():
+            # Lire le nombre (peut être sur 2 chiffres)
+            num = c
+            if i + 1 < len(musique) and musique[i + 1].isdigit():
+                num += musique[i + 1]
+                i += 1
+            place = int(num)
+            place = place if place != 0 else 15
+
+            # Regarder la lettre qui suit ce nombre
+            lettre_suivante = ""
+            if i + 1 < len(musique) and musique[i + 1].isalpha():
+                lettre_suivante = musique[i + 1].lower()
+
+            # Décider si on garde ce résultat
+            if disc_upper == "PLAT":
+                # Pour le PLAT : garder seulement les résultats sans lettre
+                # ou avec des lettres qui ne sont pas d'autres disciplines
+                if lettre_suivante == "" or lettre_suivante not in toutes_lettres:
+                    places.append(place)
+            else:
+                # Pour les autres disciplines : garder seulement les résultats
+                # avec la lettre correspondante à cette discipline
+                if lettre_suivante in lettres_cible:
+                    places.append(place)
+
+        i += 1
+
+    # Si pas assez de résultats dans cette discipline, retourner défaut
+    # (le cheval est nouveau dans cette discipline)
+    if len(places) < 2:
+        return defaut
+
+    return _calculer_stats_depuis_places(places)
+
+
+def _calculer_stats_depuis_places(places: list) -> dict:
+    """Calcule les 5 features statistiques depuis une liste de places."""
     penalite = 3.0 if places.count(15) >= 2 else 0.0
 
     recent5 = places[-5:]
     poids5  = list(range(1, len(recent5) + 1))
-    forme_recente = round(sum(p * w for p, w in zip(recent5, poids5)) / sum(poids5) + penalite, 2)
+    forme_recente = round(
+        sum(p * w for p, w in zip(recent5, poids5)) / sum(poids5) + penalite, 2)
 
     recent10 = places[-10:]
     poids10  = list(range(1, len(recent10) + 1))
-    forme_10 = round(sum(p * w for p, w in zip(recent10, poids10)) / sum(poids10) + penalite, 2)
+    forme_10 = round(
+        sum(p * w for p, w in zip(recent10, poids10)) / sum(poids10) + penalite, 2)
 
     meilleure_place = int(min(places))
     regularite      = round(float(np.std(places[-10:])) if len(places) >= 2 else 3.0, 2)
-    momentum        = round(float(np.mean(places[-6:-3]) - np.mean(places[-3:])), 2) if len(places) >= 6 else 0.0
+    momentum        = round(
+        float(np.mean(places[-6:-3]) - np.mean(places[-3:])), 2
+    ) if len(places) >= 6 else 0.0
 
     return {
         "forme_recente"  : forme_recente,
@@ -139,9 +235,10 @@ def extraire_stats_musique(musique: str) -> dict:
         "momentum"       : momentum,
     }
 
-# ---------------------------------------------
+
+# ─────────────────────────────────────────────
 # CONSTRUCTION DES FEATURES
-# ---------------------------------------------
+# ─────────────────────────────────────────────
 
 def construire_features(participants, course, hippodrome,
                          stats_cheval, stats_jockey, stats_hippo):
@@ -154,11 +251,10 @@ def construire_features(participants, course, hippodrome,
     disc_code    = DISCIPLINE_MAP.get(discipline, 2)
     tranche_dist = int(distance // 400) * 400
 
-    # ✅ CORRECTION : lire les cotes depuis dernierRapportDirect
+    # Lire les cotes depuis dernierRapportDirect
     cotes = []
     for p in participants:
         cotes.append(extraire_cote_api(p))
-
     cotes_sorted = sorted(cotes)
 
     for i, p in enumerate(participants):
@@ -175,10 +271,10 @@ def construire_features(participants, course, hippodrome,
         cote      = cotes[i]
         rang_cote = cotes_sorted.index(cote) + 1 if cote in cotes_sorted else nb_partants
 
-        sc = stats_cheval.get(nom_cheval, {})
+        sc          = stats_cheval.get(nom_cheval, {})
         taux_cheval = sc.get("taux", 0.18) if sc.get("courses", 0) >= 3 else 0.18
 
-        sj = stats_jockey.get(nom_jockey, {})
+        sj          = stats_jockey.get(nom_jockey, {})
         taux_jockey = sj.get("taux", 0.18) if sj.get("courses", 0) >= 5 else 0.18
 
         cle_hippo = f"{nom_cheval}||{hippodrome}"
@@ -192,7 +288,8 @@ def construire_features(participants, course, hippodrome,
         nb_vic_s  = p.get("nombreVictoiresSaison", 0)
         nb_crs_s  = p.get("nombreCoursesSaison", 1)
 
-        stats_mus = extraire_stats_musique(musique)
+        # ✅ CORRECTION v4 : utiliser la musique filtrée par discipline
+        stats_mus = extraire_stats_musique_discipline(musique, discipline)
 
         lignes.append({
             "num"                  : p.get("numPmu", i + 1),
@@ -225,9 +322,10 @@ def construire_features(participants, course, hippodrome,
 
     return pd.DataFrame(lignes)
 
-# ---------------------------------------------
+
+# ─────────────────────────────────────────────
 # STATS HISTORIQUES
-# ---------------------------------------------
+# ─────────────────────────────────────────────
 
 def charger_stats_historiques(chemin_csv: str):
     if not os.path.exists(chemin_csv):
@@ -263,6 +361,7 @@ def charger_stats_historiques(chemin_csv: str):
         sd["taux"] = (sd["victoires"] / sd["courses"]).round(4)
         stats_cheval.update(sd.to_dict("index"))
 
-    stats_hippo = df.groupby("hippodrome")["succes"].mean().to_dict() if "hippodrome" in df.columns else {}
+    stats_hippo = df.groupby("hippodrome")["succes"].mean().to_dict() \
+        if "hippodrome" in df.columns else {}
 
     return stats_cheval, stats_jockey, stats_hippo
