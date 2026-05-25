@@ -414,12 +414,32 @@ with onglet_pronos:
                 titre_carte = f"🏁 {num_c} - {c_info['heure']} - {c_info['libelle']}"
                 
                 with st.expander(titre_carte, expanded=False):
+                    st.sidebar.write("Debug non-partants :", fresh_course.get('course_raw', {}).get('chevauxNonPartants'))
+                    # --- GESTION DYNAMIQUE DES NON-PARTANTS (CORRIGÉE) ---
+                    # On va chercher dans fresh_course (qui est la version mise à jour du PMU)
+                    # --- GESTION DYNAMIQUE DES NON-PARTANTS (ULTRA-ROBUSTE) ---
+                    raw_data = fresh_course.get('course_raw', {})
+                    participants = fresh_course.get('participants', [])
                     
-                    # --- GESTION DES NON-PARTANTS ---
-                    non_partants = c_info['course_raw'].get('chevauxNonPartants', [])
+                    # 1. Récupération via deux méthodes
+                    np_global = raw_data.get('chevauxNonPartants', [])
+                    np_local = [p.get('num') for p in participants if p.get('estNonPartant') == True]
+                    
+                    # Fusion des deux listes (sans doublons)
+                    non_partants = list(set(list(np_global) + np_local))
+                    
+                    # 2. Affichage en rouge si détecté
                     if non_partants:
+                        st.error(f"⚠️ {len(non_partants)} NON-PARTANT(S) DÉTECTÉ(S) : {', '.join(map(str, sorted(non_partants)))}")
                         for np_num in non_partants:
-                            st.error(f"⚠️ N°{np_num} DÉCLARÉ NON PARTANT")
+                            st.write(f"🛑 N°{np_num} retiré du classement")
+                    else:
+                        # Si le PMU est capricieux, parfois l'info est dans 'participants'
+                        participants_data = fresh_course.get('participants', [])
+                        np_list = [p.get('num') for p in participants_data if p.get('estNonPartant') == True]
+                        if np_list:
+                            st.error(f"⚠️ NON-PARTANT DÉTECTÉ : N° {', '.join(map(str, np_list))}")
+                            non_partants = np_list # On synchronise pour le filtrage plus bas
 
                     st.markdown(f"""<div class="course-header-mobile">
 <div class="ch-title">🏆 {c_info['libelle']}</div>
