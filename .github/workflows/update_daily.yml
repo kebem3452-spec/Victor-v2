@@ -2,30 +2,39 @@ name: Victor V2 - Automatisation Intégrale
 
 on:
   schedule:
-    - cron: '0 7 * * *'      # Chaque matin à 07h00 UTC (Pronos & Données)
-    - cron: '0 20 * * *'     # Chaque soir à 20h00 UTC (Arrivées du soir)
-    - cron: '30 7 * * 0'     # Chaque dimanche à 07h30 UTC (Réentraînement IA)
-    - cron: '0 6 1 * *'      # Chaque 1er du mois à 06h00 UTC (Optimisation Optuna)
-  workflow_dispatch:         # Pour tester manuellement quand tu veux
+    - cron: '0 7 * * *'
+    - cron: '0 20 * * *'
+    - cron: '30 7 * * 0'
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Quel job lancer ?'
+        required: true
+        default: 'soir'
+        type: choice
+        options:
+          - matin
+          - soir
+          - dimanche
+          - mensuel
 
 permissions:
-  contents: write            # CRITIQUE : Autorise GitHub à sauvegarder les fichiers sur ton dépôt
+  contents: write
 
 jobs:
-  # ─────────────────────────────────────────────────────────────
-  # 1. MATIN : COLLECTE ET FEATURES (07h00)
-  # ─────────────────────────────────────────────────────────────
+
   matin-pronostics:
-    if: github.event.schedule == '0 7 * * *' || github.event_name == 'workflow_dispatch'
+    if: |
+      github.event.schedule == '0 7 * * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'matin')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-      
       - run: pip install -r requirements.txt
-      
       - name: Pipeline du Matin
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -33,7 +42,6 @@ jobs:
         run: |
           python 6_maj_quotidienne.py
           python 2_feature_engineering.py
-
       - name: Sauvegarder sur GitHub
         run: |
           git config --global user.name "github-actions[bot]"
@@ -42,26 +50,22 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "🤖 [Auto] Maj des statistiques du matin"
           git push origin main
 
-  # ─────────────────────────────────────────────────────────────
-  # 2. SOIR : RÉSULTATS (20h00) - Utilise ton script 12
-  # ─────────────────────────────────────────────────────────────
   soir-resultats:
-    if: github.event.schedule == '0 20 * * *'
+    if: |
+      github.event.schedule == '0 20 * * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'soir')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-          
       - run: pip install -r requirements.txt
-      
       - name: Collecte des résultats
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: python 12_collecteur_resultats.py
-
       - name: Sauvegarder sur GitHub
         run: |
           git config --global user.name "github-actions[bot]"
@@ -70,20 +74,17 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "🤖 [Auto] Arrivées du soir"
           git push origin main
 
-  # ─────────────────────────────────────────────────────────────
-  # 3. DIMANCHE : RÉENTRAÎNEMENT LOURD (07h30)
-  # ─────────────────────────────────────────────────────────────
   dimanche-reentrainement:
-    if: github.event.schedule == '30 7 * * 0'
+    if: |
+      github.event.schedule == '30 7 * * 0' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'dimanche')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-          
       - run: pip install -r requirements.txt
-      
       - name: Entraînement Modèle & Superviseur
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -92,7 +93,6 @@ jobs:
           python 3_entrainer_modele.py
           python 10_dataset_simulation.py
           python 11_superviseur.py
-
       - name: Sauvegarder Modèles sur GitHub
         run: |
           git config --global user.name "github-actions[bot]"
@@ -101,20 +101,17 @@ jobs:
           git diff-index --quiet HEAD || git commit -m "🏆 [IA] Modèles hebdomadaires mis à jour"
           git push origin main
 
-  # ─────────────────────────────────────────────────────────────
-  # 4. 1ER DU MOIS : OPTIMISATION (06h00)
-  # ─────────────────────────────────────────────────────────────
   mensuel-optimisation:
-    if: github.event.schedule == '0 6 1 * *'
+    if: |
+      github.event.schedule == '0 6 1 * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'mensuel')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-          
       - run: pip install -r requirements.txt
-      
       - name: Optuna & Backtesting
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -122,7 +119,6 @@ jobs:
         run: |
           python 9_optimiser_optuna.py
           python 7_backtesting.py
-
       - name: Sauvegarder Paramètres sur GitHub
         run: |
           git config --global user.name "github-actions[bot]"
