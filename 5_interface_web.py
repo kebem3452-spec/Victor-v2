@@ -104,7 +104,7 @@ if st.query_params.get("page") == "admin":
 # ACCÈS LIBRE — phase test
 # ─────────────────────────────────────────────
 # Pour activer l'authentification : mettre ACCES_LIBRE = False
-ACCES_LIBRE = True
+ACCES_LIBRE = False
 
 if ACCES_LIBRE:
     st.session_state["connecte"]       = True
