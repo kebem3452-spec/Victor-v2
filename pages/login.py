@@ -1,14 +1,12 @@
 """
 VICTOR V2 — pages/login.py
-Optimisé pour la production.
+Session persistante via localStorage (Streamlit Cloud compatible)
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 from auth.supabase_client import verifier_connexion, verifier_session
 
-# ─────────────────────────────────────────────
-# Liste des pays (conservée)
-# ─────────────────────────────────────────────
 AFRICA_CODES = {
     "Mali (+223)": "+223", "Sénégal (+221)": "+221", "Côte d'Ivoire (+225)": "+225",
     "Burkina Faso (+226)": "+226", "Niger (+227)": "+227", "Togo (+228)": "+228",
@@ -48,40 +46,69 @@ def render_phone_input_login():
     return f"+{clean}"
 
 def afficher_login():
-    # ✅ PRIORITÉ 1 : Si déjà connecté en session, rediriger immédiatement
+    # ── PRIORITÉ 1 : session_state déjà connecté ──
     if st.session_state.get("connecte"):
         st.switch_page("5_interface_web.py")
         return
 
-    # ✅ PRIORITÉ 2 : Vérifier les query_params sauvegardés (session persistante)
-    # Même si le site s'ouvre sur login, on vérifie si un token valide existe dans l'URL
-    saved_phone = st.query_params.get("saved_phone", "")
-    saved_token = st.query_params.get("saved_token", "")
-    if saved_phone and saved_token:
-        if verifier_session(saved_phone, saved_token):
-            # Token valide : restaurer la session et rediriger sans afficher le formulaire
+    # ── PRIORITÉ 2 : lire localStorage et pousser vers Streamlit via query_params ──
+    # Ce composant lit le localStorage du navigateur.
+    # S'il trouve un token, il recharge la page avec ?lsp=PHONE&lst=TOKEN dans l'URL.
+    # Streamlit reçoit alors ces params et peut les lire normalement.
+    components.html("""
+    <script>
+    (function() {
+        const phone = localStorage.getItem('victor_phone');
+        const token = localStorage.getItem('victor_token');
+        if (phone && token) {
+            const url = new URL(window.parent.location.href);
+            const already = url.searchParams.get('lsp');
+            if (!already) {
+                url.searchParams.set('lsp', phone);
+                url.searchParams.set('lst', token);
+                window.parent.location.replace(url.toString());
+            }
+        }
+    })();
+    </script>
+    """, height=0)
+
+    # ── PRIORITÉ 3 : lire les params injectés par le script ci-dessus ──
+    lsp = st.query_params.get("lsp", "")
+    lst = st.query_params.get("lst", "")
+    if lsp and lst:
+        if verifier_session(lsp, lst):
             st.session_state["connecte"]       = True
-            st.session_state["telephone"]      = saved_phone
-            st.session_state["session_token"]  = saved_token
-            st.session_state["nom"]            = st.session_state.get("nom", "Abonné")
-            st.session_state["plan"]           = st.session_state.get("plan", "pro")
-            st.session_state["jours_restants"] = st.session_state.get("jours_restants", 999)
+            st.session_state["telephone"]      = lsp
+            st.session_state["session_token"]  = lst
+            st.session_state["nom"]            = "Abonné"
+            st.session_state["plan"]           = "pro"
+            st.session_state["jours_restants"] = 999
+            st.query_params.clear()
             st.switch_page("5_interface_web.py")
             return
         else:
-            # Token expiré ou invalide : nettoyer et afficher le formulaire normalement
+            # Token expiré : effacer localStorage et afficher le formulaire
+            components.html("""
+            <script>
+            localStorage.removeItem('victor_phone');
+            localStorage.removeItem('victor_token');
+            </script>
+            """, height=0)
             st.query_params.clear()
 
-    # ✅ PRIORITÉ 3 : Afficher le formulaire de connexion normalement
-    st.markdown("""<style>.login-title { font-size:2.5rem; font-weight:700; color:#1D9E75; text-align:center; }
-    .login-sub { font-size:1rem; color:#888; text-align:center; margin-bottom:1rem; }</style>""", unsafe_allow_html=True)
+    # ── PRIORITÉ 4 : afficher le formulaire de connexion ──
+    st.markdown("""<style>
+    .login-title { font-size:2.5rem; font-weight:700; color:#1D9E75; text-align:center; }
+    .login-sub { font-size:1rem; color:#888; text-align:center; margin-bottom:1rem; }
+    </style>""", unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1, 4, 1])
     with col2:
         st.markdown('<div class="login-title">🏇 VICTOR V2</div>', unsafe_allow_html=True)
         st.markdown('<div class="login-sub">Intelligence Artificielle PMU</div>', unsafe_allow_html=True)
 
-        telephone = render_phone_input_login()
+        telephone    = render_phone_input_login()
         mot_de_passe = st.text_input("🔒 Code secret", type="password", key="login_mdp")
 
         if st.button("🚀 Se connecter", use_container_width=True, type="primary"):
@@ -100,10 +127,16 @@ def afficher_login():
                     st.session_state["session_token"]  = abonne["session_token"]
                     st.session_state["jours_restants"] = abonne["jours_restants"]
 
-                    st.query_params["saved_phone"] = telephone
-                    st.query_params["saved_token"] = abonne["session_token"]
+                    # ── Sauvegarder dans localStorage du navigateur ──
+                    token_safe  = abonne["session_token"].replace("'", "\\'")
+                    phone_safe  = abonne["telephone"].replace("'", "\\'")
+                    components.html(f"""
+                    <script>
+                    localStorage.setItem('victor_phone', '{phone_safe}');
+                    localStorage.setItem('victor_token', '{token_safe}');
+                    </script>
+                    """, height=0)
 
-                    # ✅ Redirection forcée
                     st.switch_page("5_interface_web.py")
                 else:
                     st.error(f"❌ {result['message']}")
