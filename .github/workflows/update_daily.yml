@@ -65,7 +65,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python 12_collecteur_resultats.py 2026-05-24
+        run: python 12_collecteur_resultats.py
       - name: Sauvegarder sur GitHub
         run: |
           git config --global user.name "github-actions[bot]"
