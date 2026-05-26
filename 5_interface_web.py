@@ -1,10 +1,14 @@
 """
-VICTOR V2 — Interface Web v15.0
-================================
-- Session via COOKIE NAVIGATEUR (streamlit-cookies-controller)
-- Plus aucune redirection forcée au rafraîchissement
-- Badges fiabilité COUP SÛR / SIGNAL / FAIBLE
-- charger_stats lit raw_courses.csv
+VICTOR V2 — Interface Web v16.0 — VERSION DÉFINITIVE
+=====================================================
+Architecture single-page : login + interface dans un seul fichier.
+Plus aucun switch_page croisé → impossible d'avoir une boucle.
+
+Logique d'authentification :
+1. session_state.connecte → afficher interface
+2. Cookie présent → restaurer session puis afficher interface
+3. URL t/p présent (compat) → restaurer + écrire cookie
+4. Rien → afficher formulaire login DANS CETTE PAGE
 """
 
 import streamlit as st
@@ -14,12 +18,17 @@ import numpy as np
 import joblib
 import json
 import os
+import time
+import hashlib
+import secrets
 import datetime
-from datetime import date, timezone
+from datetime import date, timedelta, timezone
 
 from utils import construire_features, charger_stats_historiques
 from kelly import calculer_mise
-from auth.supabase_client import deconnecter
+from auth.supabase_client import (
+    verifier_connexion, deconnecter, get_client
+)
 from streamlit_cookies_controller import CookieController
 
 try:
@@ -28,73 +37,16 @@ try:
 except ImportError:
     AUTOREFRESH_DISPO = False
 
+# ═════════════════════════════════════════════════════
+# CONFIG GLOBAL
+# ═════════════════════════════════════════════════════
+
 st.set_page_config(
     page_title="Victor V2 - Pronostics PMU",
     page_icon="🏇",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# Cookie controller — instancié une seule fois
-cookies = CookieController()
-
-st.markdown("""<style>
-.course-header-mobile { background-color:#1a1c23; border-radius:12px; padding:16px; margin-bottom:16px; text-align:center; border:1px solid #2d3139; }
-.ch-title  { font-size:16px; font-weight:800; color:#ffffff; text-transform:uppercase; margin-bottom:4px; }
-.ch-sub    { font-size:13px; color:#a0a5b1; font-weight:600; }
-.ch-stats  { font-size:12px; color:#6b7280; margin-top:4px; }
-.ch-time   { font-size:15px; font-weight:700; color:#1D9E75; margin-top:8px; }
-.ch-conseil{ font-size:12px; color:#a0a5b1; margin-top:6px; }
-
-.horse-list { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
-.horse-row  { display:flex; align-items:center; background-color:#21252d; border-radius:8px; padding:10px 12px; }
-.h-num  { width:44px; height:44px; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:900; border-radius:6px; margin-right:14px; color:white; flex-shrink:0; }
-.rank-0 { background-color:#1D9E75; }
-.rank-1, .rank-2 { background-color:#EF9F27; }
-.rank-other { background-color:#4a4d55; }
-.rank-lock  { background-color:#2d3139; }
-.h-info { flex:1; }
-.h-name { font-size:14px; font-weight:700; color:#ffffff; }
-.h-cote { font-size:12px; color:#a0a5b1; margin-top:2px; }
-.h-stats{ text-align:right; }
-.h-pct  { font-size:15px; font-weight:800; color:#1D9E75; }
-.h-pct-lock { font-size:13px; font-weight:700; color:#6b7280; }
-.h-kelly{ font-size:11px; color:#a0a5b1; margin-top:2px; }
-
-.result-box  { background:#1D9E7511; border:1px solid #1D9E7544; border-radius:10px; padding:12px; margin-top:10px; }
-.result-title{ font-size:12px; color:#1D9E75; font-weight:700; margin-bottom:4px; }
-.result-val  { font-size:16px; font-weight:800; color:#FF0000; }
-.cta-box     { background:#1a1c23; border:1px solid #2d3139; border-radius:10px; padding:12px; margin-top:12px; text-align:center; }
-.cta-box a   { color:#1D9E75; text-decoration:none; font-weight:700; font-size:13px; }
-
-.badge-or    { background:#EF9F27; color:#1a1100; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:900; }
-.badge-signal{ background:#3B82F6; color:#ffffff; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:800; }
-.badge-faible{ background:#374151; color:#9CA3AF; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700; }
-
-.banniere-or {
-    background:#EF9F27;
-    border-radius:16px;
-    padding:20px;
-    margin-bottom:16px;
-}
-.banniere-titre { font-size:22px !important; font-weight:900 !important; color:#1a1100 !important; }
-.banniere-sub   { font-size:14px !important; font-weight:600 !important; color:#3d2000 !important; margin-top:4px; }
-
-.cs-card { background:#7a4f00; border:2px solid #EF9F27; border-radius:12px; padding:14px; height:100%; }
-.cs-code { font-size:11px !important; font-weight:800 !important; color:#FCD34D !important; }
-.cs-cheval{ font-size:18px !important; font-weight:900 !important; color:#ffffff !important; margin:6px 0; }
-.cs-stats{ font-size:13px !important; font-weight:700 !important; color:#FCD34D !important; }
-.cs-hippo{ font-size:11px !important; color:#d4b483 !important; margin-top:4px; }
-
-.banniere-locked { background:#1D9E7522; border:2px solid #1D9E75; border-radius:16px; padding:20px; margin-bottom:16px; text-align:center; }
-.locked-titre{ font-size:20px; font-weight:900; color:#1D9E75; }
-.locked-sub  { font-size:13px; color:#a0a5b1; margin-top:6px; }
-.locked-cta  { font-size:14px; color:#EF9F27; font-weight:800; margin-top:10px; }
-</style>""", unsafe_allow_html=True)
-
-# ─────────────────────────────────────────────
-# CONSTANTES
-# ─────────────────────────────────────────────
 
 BASE_URL       = "https://offline.turfinfo.api.pmu.fr/rest/client/7/programme"
 HEADERS        = {"User-Agent": "Mozilla/5.0"}
@@ -103,28 +55,112 @@ DOSSIER_DATA   = "data"
 ACCES_LIBRE    = False
 COOKIE_NAME    = "victor_session"
 
-# ─────────────────────────────────────────────
+cookies = CookieController()
+
+# ═════════════════════════════════════════════════════
+# CSS GLOBAL
+# ═════════════════════════════════════════════════════
+
+st.markdown("""<style>
+.login-card { max-width:480px; margin:40px auto; padding:32px; background:#1a1c23;
+              border-radius:16px; border:1px solid #2d3139; }
+.login-title { font-size:2.5rem; font-weight:900; color:#1D9E75; text-align:center; }
+.login-sub   { font-size:1rem; color:#a0a5b1; text-align:center; margin-bottom:1.5rem; }
+
+.course-header-mobile { background-color:#1a1c23; border-radius:12px; padding:16px;
+                        margin-bottom:16px; text-align:center; border:1px solid #2d3139; }
+.ch-title { font-size:16px; font-weight:800; color:#fff; text-transform:uppercase; margin-bottom:4px; }
+.ch-sub   { font-size:13px; color:#a0a5b1; font-weight:600; }
+.ch-stats { font-size:12px; color:#6b7280; margin-top:4px; }
+.ch-time  { font-size:15px; font-weight:700; color:#1D9E75; margin-top:8px; }
+.ch-conseil{ font-size:12px; color:#a0a5b1; margin-top:6px; }
+
+.horse-list{ display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+.horse-row { display:flex; align-items:center; background-color:#21252d;
+             border-radius:8px; padding:10px 12px; }
+.h-num     { width:44px; height:44px; display:flex; align-items:center; justify-content:center;
+             font-size:22px; font-weight:900; border-radius:6px; margin-right:14px; color:white; flex-shrink:0; }
+.rank-0 { background-color:#1D9E75; }
+.rank-1, .rank-2 { background-color:#EF9F27; }
+.rank-other { background-color:#4a4d55; }
+.rank-lock  { background-color:#2d3139; }
+.h-info { flex:1; }
+.h-name { font-size:14px; font-weight:700; color:#fff; }
+.h-cote { font-size:12px; color:#a0a5b1; margin-top:2px; }
+.h-stats{ text-align:right; }
+.h-pct  { font-size:15px; font-weight:800; color:#1D9E75; }
+.h-pct-lock { font-size:13px; font-weight:700; color:#6b7280; }
+.h-kelly{ font-size:11px; color:#a0a5b1; margin-top:2px; }
+
+.result-box { background:#1D9E7511; border:1px solid #1D9E7544; border-radius:10px; padding:12px; margin-top:10px; }
+.result-title { font-size:12px; color:#1D9E75; font-weight:700; margin-bottom:4px; }
+.result-val { font-size:16px; font-weight:800; color:#fff; }
+.cta-box   { background:#1a1c23; border:1px solid #2d3139; border-radius:10px; padding:12px; margin-top:12px; text-align:center; }
+.cta-box a { color:#1D9E75; text-decoration:none; font-weight:700; font-size:13px; }
+
+.badge-or    { background:#EF9F27; color:#1a1100; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:900; }
+.badge-signal{ background:#3B82F6; color:#fff; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:800; }
+.badge-faible{ background:#374151; color:#9CA3AF; padding:4px 12px; border-radius:20px; font-size:12px; font-weight:700; }
+
+.banniere-or    { background:#EF9F27; border-radius:16px; padding:20px; margin-bottom:16px; }
+.banniere-titre { font-size:22px !important; font-weight:900 !important; color:#1a1100 !important; }
+.banniere-sub   { font-size:14px !important; font-weight:600 !important; color:#3d2000 !important; margin-top:4px; }
+
+.cs-card  { background:#7a4f00; border:2px solid #EF9F27; border-radius:12px; padding:14px; height:100%; }
+.cs-code  { font-size:11px !important; font-weight:800 !important; color:#FCD34D !important; }
+.cs-cheval{ font-size:18px !important; font-weight:900 !important; color:#fff !important; margin:6px 0; }
+.cs-stats { font-size:13px !important; font-weight:700 !important; color:#FCD34D !important; }
+.cs-hippo { font-size:11px !important; color:#d4b483 !important; margin-top:4px; }
+
+.banniere-locked{ background:#1D9E7522; border:2px solid #1D9E75; border-radius:16px; padding:20px; margin-bottom:16px; text-align:center; }
+.locked-titre { font-size:20px; font-weight:900; color:#1D9E75; }
+.locked-sub   { font-size:13px; color:#a0a5b1; margin-top:6px; }
+.locked-cta   { font-size:14px; color:#EF9F27; font-weight:800; margin-top:10px; }
+</style>""", unsafe_allow_html=True)
+
+# ═════════════════════════════════════════════════════
 # ROUTING ADMIN
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 
 if st.query_params.get("page") == "admin":
     from pages.admin import afficher_admin
     afficher_admin()
     st.stop()
 
-# ─────────────────────────────────────────────
-# SESSION via COOKIE
-# Logique :
-# 1. session_state actif → on continue
-# 2. cookie présent → restaurer depuis cookie + Supabase
-# 3. URL t/p présent (compat ancienne version) → restaurer + écrire cookie
-# 4. Rien → login
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
+# CONSTANTES PAYS
+# ═════════════════════════════════════════════════════
+
+AFRICA_CODES = {
+    "Mali (+223)": "+223", "Sénégal (+221)": "+221", "Côte d'Ivoire (+225)": "+225",
+    "Burkina Faso (+226)": "+226", "Niger (+227)": "+227", "Togo (+228)": "+228",
+    "Bénin (+229)": "+229", "Guinée (+224)": "+224", "Mauritanie (+222)": "+222",
+    "Gambie (+220)": "+220", "Guinée-Bissau (+245)": "+245", "Cap-Vert (+238)": "+238",
+    "Sierra Leone (+232)": "+232", "Libéria (+231)": "+231", "Ghana (+233)": "+233",
+    "Nigeria (+234)": "+234", "Cameroun (+237)": "+237", "Tchad (+235)": "+235",
+    "République Centrafricaine (+236)": "+236", "Gabon (+241)": "+241",
+    "Congo (+242)": "+242", "RDC (+243)": "+243", "Angola (+244)": "+244",
+    "Guinée Équatoriale (+240)": "+240", "Sao Tomé-et-Principe (+239)": "+239",
+    "Rwanda (+250)": "+250", "Burundi (+257)": "+257", "Tanzanie (+255)": "+255",
+    "Kenya (+254)": "+254", "Ouganda (+256)": "+256", "Djibouti (+253)": "+253",
+    "Somalie (+252)": "+252", "Éthiopie (+251)": "+251", "Érythrée (+291)": "+291",
+    "Soudan (+249)": "+249", "Soudan du Sud (+211)": "+211", "Égypte (+20)": "+20",
+    "Libye (+218)": "+218", "Tunisie (+216)": "+216", "Algérie (+213)": "+213",
+    "Maroc (+212)": "+212", "Madagascar (+261)": "+261", "Maurice (+230)": "+230",
+    "Comores (+269)": "+269", "Seychelles (+248)": "+248", "Réunion (+262)": "+262",
+    "Mozambique (+258)": "+258", "Malawi (+265)": "+265", "Zambie (+260)": "+260",
+    "Zimbabwe (+263)": "+263", "Namibie (+264)": "+264", "Botswana (+267)": "+267",
+    "Eswatini (+268)": "+268", "Lesotho (+266)": "+266", "Afrique du Sud (+27)": "+27",
+    "Autre (saisir l'indicatif)": "autre",
+}
+
+# ═════════════════════════════════════════════════════
+# RESTAURATION DE SESSION
+# ═════════════════════════════════════════════════════
 
 def restaurer_depuis(telephone, token):
-    """Restaure la session si le couple téléphone+token est valide."""
+    """Vérifie le couple (téléphone, token) dans Supabase et restaure la session."""
     try:
-        from auth.supabase_client import get_client
         client = get_client()
         if not client:
             return False
@@ -139,66 +175,230 @@ def restaurer_depuis(telephone, token):
         if ab.get("session_token", "") != token:
             return False
         exp = date.fromisoformat(ab["date_expiration"])
-        st.session_state.update({
-            "connecte"      : True,
-            "telephone"     : telephone,
-            "session_token" : token,
-            "nom"           : ab.get("nom", "Abonné"),
-            "plan"          : ab.get("plan", "pro"),
-            "jours_restants": max(0, (exp - date.today()).days),
-        })
+        st.session_state["connecte"]       = True
+        st.session_state["telephone"]      = telephone
+        st.session_state["session_token"]  = token
+        st.session_state["nom"]            = ab.get("nom", "Abonné")
+        st.session_state["plan"]           = ab.get("plan", "pro")
+        st.session_state["jours_restants"] = max(0, (exp - date.today()).days)
         return True
     except Exception:
-        # Supabase injoignable → restauration tolérante
-        st.session_state.update({
-            "connecte"      : True,
-            "telephone"     : telephone,
-            "session_token" : token,
-            "nom"           : "Abonné",
-            "plan"          : "pro",
-            "jours_restants": 999,
-        })
+        # Supabase injoignable → restauration tolérante (priorité à l'UX)
+        st.session_state["connecte"]       = True
+        st.session_state["telephone"]      = telephone
+        st.session_state["session_token"]  = token
+        st.session_state["nom"]            = "Abonné"
+        st.session_state["plan"]           = "pro"
+        st.session_state["jours_restants"] = 999
         return True
 
 
-if not ACCES_LIBRE and not st.session_state.get("connecte"):
-    cookie_val = cookies.get(COOKIE_NAME)
-    if cookie_val and ":" in cookie_val:
-        try:
+def tenter_restauration():
+    """Tente de restaurer la session via cookie puis via URL."""
+    if st.session_state.get("connecte"):
+        return True
+
+    # 1. Cookie
+    try:
+        cookie_val = cookies.get(COOKIE_NAME)
+        if cookie_val and ":" in cookie_val:
             tel, tok = cookie_val.split(":", 1)
-            restaurer_depuis(tel, tok)
-        except Exception:
-            pass
+            if restaurer_depuis(tel, tok):
+                return True
+    except Exception:
+        pass
 
-    if not st.session_state.get("connecte"):
-        url_tok = st.query_params.get("t", "")
-        url_tel = st.query_params.get("p", "")
-        if url_tok and url_tel:
-            if restaurer_depuis(url_tel, url_tok):
-                cookies.set(COOKIE_NAME, f"{url_tel}:{url_tok}",
-                             max_age=60*60*24*30)
-                st.query_params.clear()
+    # 2. URL (ancien format favoris)
+    url_tok = st.query_params.get("t", "")
+    url_tel = st.query_params.get("p", "")
+    if url_tok and url_tel:
+        if restaurer_depuis(url_tel, url_tok):
+            try:
+                cookies.set(COOKIE_NAME, f"{url_tel}:{url_tok}", max_age=60*60*24*30)
+            except Exception:
+                pass
+            st.query_params.clear()
+            return True
 
-    if not st.session_state.get("connecte"):
-        st.switch_page("pages/login.py")
+    return False
+
+
+# ═════════════════════════════════════════════════════
+# FORMULAIRE LOGIN — INTÉGRÉ DANS CETTE PAGE
+# ═════════════════════════════════════════════════════
+
+def afficher_login_inline():
+    """Affiche le formulaire de connexion directement dans 5_interface_web.py."""
+
+    col1, col2, col3 = st.columns([1, 4, 1])
+    with col2:
+        st.markdown('<div class="login-title">🏇 VICTOR V2</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-sub">Intelligence Artificielle PMU</div>', unsafe_allow_html=True)
+
+        # Numéro
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            selection = st.selectbox("🌍 Pays", list(AFRICA_CODES.keys()),
+                                      index=0, key="li_pays")
+        with c2:
+            if AFRICA_CODES[selection] == "autre":
+                prefix = st.text_input("Indicatif", placeholder="+xxx", key="li_pfx")
+                num    = st.text_input("Numéro", placeholder="06 00 00 00 00", key="li_num")
+            else:
+                prefix = AFRICA_CODES[selection]
+                st.text_input("Indicatif", value=prefix, disabled=True, key="li_pfx_auto")
+                num = st.text_input("Numéro", placeholder="77 000 00 00", key="li_num_auto")
+
+        clean = f"{prefix.replace('+','').replace(' ','')}{num.replace(' ','')}"
+        telephone = f"+{clean}"
+
+        mot_de_passe = st.text_input("🔒 Code secret", type="password", key="li_mdp")
+
+        if st.button("🚀 Se connecter", use_container_width=True, type="primary"):
+            if len(telephone) < 8 or not mot_de_passe:
+                st.error("⚠️ Remplissez tous les champs.")
+            else:
+                with st.spinner("Vérification..."):
+                    result = verifier_connexion(telephone, mot_de_passe)
+                if result["succes"]:
+                    ab = result["abonne"]
+                    st.session_state["connecte"]       = True
+                    st.session_state["telephone"]      = ab["telephone"]
+                    st.session_state["nom"]            = ab.get("nom", "Abonné")
+                    st.session_state["plan"]           = ab.get("plan", "pro")
+                    st.session_state["session_token"]  = ab["session_token"]
+                    st.session_state["jours_restants"] = ab["jours_restants"]
+                    try:
+                        cookies.set(
+                            COOKIE_NAME,
+                            f"{ab['telephone']}:{ab['session_token']}",
+                            max_age=60*60*24*30
+                        )
+                    except Exception:
+                        pass
+                    st.rerun()
+                else:
+                    st.error(f"❌ {result['message']}")
+
+        if st.button("📝 Créer un compte gratuit", use_container_width=True):
+            st.session_state["__mode__"] = "inscription"
+            st.rerun()
+
+        wa_msg = "Bonjour, j'ai perdu mon mot de passe Victor V2. Mon numéro est : " + telephone
+        wa_url = f"https://wa.me/221762641751?text={wa_msg.replace(' ', '%20')}"
+        st.link_button("🔑 Mot de passe oublié ?", wa_url, use_container_width=True)
+
+
+def afficher_inscription_inline():
+    """Formulaire d'inscription inline."""
+
+    col1, col2, col3 = st.columns([1, 4, 1])
+    with col2:
+        st.markdown('<div class="login-title">🏇 VICTOR V2</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-sub">Créer un compte gratuit (3 jours)</div>', unsafe_allow_html=True)
+
+        nom = st.text_input("👤 Prénom et Nom", key="ii_nom")
+
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            selection = st.selectbox("🌍 Pays", list(AFRICA_CODES.keys()),
+                                      index=0, key="ii_pays")
+        with c2:
+            if AFRICA_CODES[selection] == "autre":
+                prefix = st.text_input("Indicatif", placeholder="+xxx", key="ii_pfx")
+                num    = st.text_input("Numéro", placeholder="06 00 00 00 00", key="ii_num")
+            else:
+                prefix = AFRICA_CODES[selection]
+                st.text_input("Indicatif", value=prefix, disabled=True, key="ii_pfx_auto")
+                num = st.text_input("Numéro", placeholder="77 000 00 00", key="ii_num_auto")
+
+        clean = f"{prefix.replace('+','').replace(' ','')}{num.replace(' ','')}"
+        telephone = f"+{clean}"
+
+        pwd  = st.text_input("🔒 Mot de passe", type="password", key="ii_pwd")
+        pwd2 = st.text_input("🔒 Confirmer mot de passe", type="password", key="ii_pwd2")
+
+        if st.button("✅ Créer mon compte", use_container_width=True, type="primary"):
+            if not nom.strip():
+                st.error("⚠️ Entrez votre nom.")
+            elif len(telephone) < 8:
+                st.error("⚠️ Numéro incomplet.")
+            elif len(pwd) < 4:
+                st.error("⚠️ Mot de passe trop court (4 caractères min).")
+            elif pwd != pwd2:
+                st.error("⚠️ Les mots de passe ne correspondent pas.")
+            else:
+                client = get_client()
+                if not client:
+                    st.error("❌ Erreur de connexion serveur.")
+                else:
+                    try:
+                        res = client.table("abonnes").select("telephone")\
+                                    .eq("telephone", telephone).execute()
+                        if res.data:
+                            st.error("❌ Numéro déjà utilisé. Connectez-vous.")
+                        else:
+                            tok      = secrets.token_hex(32)
+                            date_exp = (date.today() + timedelta(days=3)).isoformat()
+                            mdp_hash = hashlib.sha256(pwd.encode()).hexdigest()
+                            client.table("abonnes").insert({
+                                "telephone"      : telephone,
+                                "mot_de_passe"   : mdp_hash,
+                                "nom"            : nom.strip(),
+                                "plan"           : "essentiel",
+                                "date_expiration": date_exp,
+                                "actif"          : True,
+                                "session_token"  : tok,
+                            }).execute()
+                            st.session_state["connecte"]       = True
+                            st.session_state["telephone"]      = telephone
+                            st.session_state["nom"]            = nom.strip()
+                            st.session_state["plan"]           = "essentiel"
+                            st.session_state["jours_restants"] = 3
+                            st.session_state["session_token"]  = tok
+                            try:
+                                cookies.set(COOKIE_NAME, f"{telephone}:{tok}",
+                                             max_age=60*60*24*30)
+                            except Exception:
+                                pass
+                            st.success(f"✅ Bienvenue {nom.strip()} !")
+                            time.sleep(1)
+                            st.session_state.pop("__mode__", None)
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Erreur : {e}")
+
+        if st.button("🔑 J'ai déjà un compte", use_container_width=True):
+            st.session_state["__mode__"] = "login"
+            st.rerun()
+
+
+# ═════════════════════════════════════════════════════
+# GATE D'AUTHENTIFICATION
+# ═════════════════════════════════════════════════════
+
+if not ACCES_LIBRE:
+    if not tenter_restauration():
+        mode = st.session_state.get("__mode__", "login")
+        if mode == "inscription":
+            afficher_inscription_inline()
+        else:
+            afficher_login_inline()
         st.stop()
-
-if ACCES_LIBRE:
-    st.session_state.update({
-        "connecte"      : True,
-        "nom"           : "Visiteur",
-        "plan"          : "pro",
-        "jours_restants": 999,
-    })
+else:
+    st.session_state["connecte"]       = True
+    st.session_state["nom"]            = "Visiteur"
+    st.session_state["plan"]           = "pro"
+    st.session_state["jours_restants"] = 999
 
 nom_abonne     = st.session_state.get("nom", "Visiteur")
 jours_restants = st.session_state.get("jours_restants", 999)
 plan           = st.session_state.get("plan", "pro")
 est_pro        = plan.lower() in ["pro", "vip"]
 
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 # CHARGEMENT MODÈLES
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 
 @st.cache_resource
 def charger_modeles(version=0):
@@ -244,9 +444,9 @@ def choisir_modele(modeles, disc_code):
             return modeles[cle]["model"], modeles[cle]["features"], cle
     return None, [], "AUCUN"
 
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 # PMU API
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 
 @st.cache_data(ttl=300)
 def get_programme(d: date):
@@ -293,7 +493,6 @@ def get_programme(d: date):
 @st.cache_data(ttl=3600)
 def get_resultats_jour(date_str):
     try:
-        from auth.supabase_client import get_client
         client = get_client()
         if not client:
             return {}
@@ -304,9 +503,9 @@ def get_resultats_jour(date_str):
     except Exception:
         return {}
 
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 # FIABILITÉ
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 
 def calculer_fiabilite(df_tri):
     if df_tri.empty:
@@ -336,9 +535,9 @@ def conseil_fiabilite(niveau):
         return "📡 Signal intéressant — miser prudemment"
     return "⚠️ Cours difficile à cerner — éviter ou miser au minimum"
 
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 # ANALYSES
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 
 @st.cache_data(ttl=86400)
 def calculer_analyses(_courses, _modeles, _stats_cheval, _stats_jockey,
@@ -374,7 +573,6 @@ def calculer_analyses(_courses, _modeles, _stats_cheval, _stats_jockey,
         }).sort_values("confiance", ascending=False).reset_index(drop=True)
         if df_tri.empty:
             continue
-
         fiabilite = calculer_fiabilite(df_tri)
         analyses.append({
             "course"          : c,
@@ -389,9 +587,9 @@ def calculer_analyses(_courses, _modeles, _stats_cheval, _stats_jockey,
         })
     return analyses, False
 
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 # SIDEBAR
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 
 if "model_version" not in st.session_state:
     st.session_state.model_version = 0
@@ -432,14 +630,17 @@ with st.sidebar:
                 deconnecter(st.session_state.get("telephone", ""))
             except Exception:
                 pass
-            cookies.remove(COOKIE_NAME)
+            try:
+                cookies.remove(COOKIE_NAME)
+            except Exception:
+                pass
             st.session_state.clear()
             st.query_params.clear()
             st.rerun()
 
-# ─────────────────────────────────────────────
-# CHARGEMENT
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
+# CHARGEMENT DONNÉES
+# ═════════════════════════════════════════════════════
 
 modeles, features_global, auc = charger_modeles(st.session_state.model_version)
 
@@ -467,12 +668,7 @@ if not courses:
     st.warning("⚠️ Aucune course disponible pour cette date.")
     st.stop()
 
-# ─────────────────────────────────────────────
-# GEL INTELLIGENT
-# ─────────────────────────────────────────────
-
 heure_utc = datetime.datetime.now(timezone.utc).hour
-
 if date_cible < d0:
     periode_cache = "fige_definitif"
 elif date_cible == d0:
@@ -494,9 +690,9 @@ if not analyses:
     st.info("Aucune course analysable aujourd'hui.")
     st.stop()
 
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 # BANNIÈRE COUPS SÛRS
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 
 coups_surs = [a for a in analyses if a["fiabilite"] == "coup_sur"]
 
@@ -526,9 +722,9 @@ if coups_surs:
 </div>""", unsafe_allow_html=True)
         st.markdown("---")
 
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 # ONGLETS
-# ─────────────────────────────────────────────
+# ═════════════════════════════════════════════════════
 
 onglet_pronos, onglet_historique = st.tabs(["🎯 Pronostics", "📅 Historique"])
 
