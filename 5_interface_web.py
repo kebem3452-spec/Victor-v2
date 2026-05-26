@@ -1,14 +1,8 @@
 """
-VICTOR V2 — Interface Web v16.0 — VERSION DÉFINITIVE
+VICTOR V2 — Interface Web v16.1 — VERSION DÉFINITIVE
 =====================================================
 Architecture single-page : login + interface dans un seul fichier.
-Plus aucun switch_page croisé → impossible d'avoir une boucle.
-
-Logique d'authentification :
-1. session_state.connecte → afficher interface
-2. Cookie présent → restaurer session puis afficher interface
-3. URL t/p présent (compat) → restaurer + écrire cookie
-4. Rien → afficher formulaire login DANS CETTE PAGE
+Cookies configurés pour Streamlit Cloud (HTTPS + SameSite=Lax + Secure).
 """
 
 import streamlit as st
@@ -54,16 +48,31 @@ DOSSIER_MODELS = "models"
 DOSSIER_DATA   = "data"
 ACCES_LIBRE    = False
 COOKIE_NAME    = "victor_session"
+COOKIE_DUREE   = 60 * 60 * 24 * 30  # 30 jours
 
 cookies = CookieController()
+
+
+def ecrire_cookie(telephone: str, token: str):
+    """Écrit le cookie de session avec les bons paramètres pour Streamlit Cloud."""
+    try:
+        cookies.set(
+            COOKIE_NAME,
+            f"{telephone}:{token}",
+            max_age=COOKIE_DUREE,
+            path="/",
+            same_site="lax",
+            secure=True,
+        )
+    except Exception:
+        pass
+
 
 # ═════════════════════════════════════════════════════
 # CSS GLOBAL
 # ═════════════════════════════════════════════════════
 
 st.markdown("""<style>
-.login-card { max-width:480px; margin:40px auto; padding:32px; background:#1a1c23;
-              border-radius:16px; border:1px solid #2d3139; }
 .login-title { font-size:2.5rem; font-weight:900; color:#1D9E75; text-align:center; }
 .login-sub   { font-size:1rem; color:#a0a5b1; text-align:center; margin-bottom:1.5rem; }
 
@@ -92,9 +101,10 @@ st.markdown("""<style>
 .h-pct-lock { font-size:13px; font-weight:700; color:#6b7280; }
 .h-kelly{ font-size:11px; color:#a0a5b1; margin-top:2px; }
 
-.result-box { background:#1D9E7511; border:1px solid #1D9E7544; border-radius:10px; padding:12px; margin-top:10px; }
-.result-title { font-size:12px; color:#1D9E75; font-weight:700; margin-bottom:4px; }
-.result-val { font-size:16px; font-weight:800; color:#fff; }
+.result-box  { background:#1D9E7522; border:1px solid #1D9E75; border-radius:10px; padding:12px; margin-top:10px; }
+.result-title{ font-size:12px !important; color:#1D9E75 !important; font-weight:700 !important; margin-bottom:4px; }
+.result-val  { font-size:16px !important; font-weight:900 !important; color:#1D9E75 !important; }
+
 .cta-box   { background:#1a1c23; border:1px solid #2d3139; border-radius:10px; padding:12px; margin-top:12px; text-align:center; }
 .cta-box a { color:#1D9E75; text-decoration:none; font-weight:700; font-size:13px; }
 
@@ -128,7 +138,7 @@ if st.query_params.get("page") == "admin":
     st.stop()
 
 # ═════════════════════════════════════════════════════
-# CONSTANTES PAYS
+# PAYS
 # ═════════════════════════════════════════════════════
 
 AFRICA_CODES = {
@@ -159,7 +169,7 @@ AFRICA_CODES = {
 # ═════════════════════════════════════════════════════
 
 def restaurer_depuis(telephone, token):
-    """Vérifie le couple (téléphone, token) dans Supabase et restaure la session."""
+    """Vérifie (téléphone, token) dans Supabase et restaure la session."""
     try:
         client = get_client()
         if not client:
@@ -183,7 +193,6 @@ def restaurer_depuis(telephone, token):
         st.session_state["jours_restants"] = max(0, (exp - date.today()).days)
         return True
     except Exception:
-        # Supabase injoignable → restauration tolérante (priorité à l'UX)
         st.session_state["connecte"]       = True
         st.session_state["telephone"]      = telephone
         st.session_state["session_token"]  = token
@@ -194,11 +203,11 @@ def restaurer_depuis(telephone, token):
 
 
 def tenter_restauration():
-    """Tente de restaurer la session via cookie puis via URL."""
+    """Restaure la session via cookie puis via URL."""
     if st.session_state.get("connecte"):
         return True
 
-    # 1. Cookie
+    # 1. Cookie navigateur
     try:
         cookie_val = cookies.get(COOKIE_NAME)
         if cookie_val and ":" in cookie_val:
@@ -208,15 +217,12 @@ def tenter_restauration():
     except Exception:
         pass
 
-    # 2. URL (ancien format favoris)
+    # 2. URL t/p (compat anciens favoris)
     url_tok = st.query_params.get("t", "")
     url_tel = st.query_params.get("p", "")
     if url_tok and url_tel:
         if restaurer_depuis(url_tel, url_tok):
-            try:
-                cookies.set(COOKIE_NAME, f"{url_tel}:{url_tok}", max_age=60*60*24*30)
-            except Exception:
-                pass
+            ecrire_cookie(url_tel, url_tok)
             st.query_params.clear()
             return True
 
@@ -224,18 +230,15 @@ def tenter_restauration():
 
 
 # ═════════════════════════════════════════════════════
-# FORMULAIRE LOGIN — INTÉGRÉ DANS CETTE PAGE
+# FORMULAIRE LOGIN INLINE
 # ═════════════════════════════════════════════════════
 
 def afficher_login_inline():
-    """Affiche le formulaire de connexion directement dans 5_interface_web.py."""
-
     col1, col2, col3 = st.columns([1, 4, 1])
     with col2:
         st.markdown('<div class="login-title">🏇 VICTOR V2</div>', unsafe_allow_html=True)
         st.markdown('<div class="login-sub">Intelligence Artificielle PMU</div>', unsafe_allow_html=True)
 
-        # Numéro
         c1, c2 = st.columns([1, 2])
         with c1:
             selection = st.selectbox("🌍 Pays", list(AFRICA_CODES.keys()),
@@ -268,14 +271,7 @@ def afficher_login_inline():
                     st.session_state["plan"]           = ab.get("plan", "pro")
                     st.session_state["session_token"]  = ab["session_token"]
                     st.session_state["jours_restants"] = ab["jours_restants"]
-                    try:
-                        cookies.set(
-                            COOKIE_NAME,
-                            f"{ab['telephone']}:{ab['session_token']}",
-                            max_age=60*60*24*30
-                        )
-                    except Exception:
-                        pass
+                    ecrire_cookie(ab["telephone"], ab["session_token"])
                     st.rerun()
                 else:
                     st.error(f"❌ {result['message']}")
@@ -290,8 +286,6 @@ def afficher_login_inline():
 
 
 def afficher_inscription_inline():
-    """Formulaire d'inscription inline."""
-
     col1, col2, col3 = st.columns([1, 4, 1])
     with col2:
         st.markdown('<div class="login-title">🏇 VICTOR V2</div>', unsafe_allow_html=True)
@@ -356,11 +350,7 @@ def afficher_inscription_inline():
                             st.session_state["plan"]           = "essentiel"
                             st.session_state["jours_restants"] = 3
                             st.session_state["session_token"]  = tok
-                            try:
-                                cookies.set(COOKIE_NAME, f"{telephone}:{tok}",
-                                             max_age=60*60*24*30)
-                            except Exception:
-                                pass
+                            ecrire_cookie(telephone, tok)
                             st.success(f"✅ Bienvenue {nom.strip()} !")
                             time.sleep(1)
                             st.session_state.pop("__mode__", None)
@@ -397,7 +387,7 @@ plan           = st.session_state.get("plan", "pro")
 est_pro        = plan.lower() in ["pro", "vip"]
 
 # ═════════════════════════════════════════════════════
-# CHARGEMENT MODÈLES
+# MODÈLES
 # ═════════════════════════════════════════════════════
 
 @st.cache_resource
