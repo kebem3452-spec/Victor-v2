@@ -1,10 +1,19 @@
 """
-VICTOR V2 — Étape 7 : Backtesting ROI (corrigé v3)
-====================================================
-Corrections :
-- Cotes forcées en numérique avant filtrage
-- Filtre 1.1 → 80.0 pour retirer les aberrations
-- Plafond 30.0 sur les gains pour éviter les ROI fictifs
+VICTOR V2 — Étape 7 : Backtesting ROI v4
+=========================================
+Simule les 4 types de paris sur les 20% de données les plus récentes.
+Chaque stratégie est simulée de façon réaliste :
+
+- GAGNANT  : on mise sur le cheval N°1 de Victor. Gagné si place == 1.
+- COUPLE   : on mise sur le Top2 de Victor (dans l'ordre ou désordre).
+             Gagné si les 2 chevaux sont dans le vrai Top2.
+- TRIO     : on mise sur le Top3 de Victor.
+             Gagné si les 3 chevaux sont dans le vrai Top3.
+- QUINTE   : on mise sur le Top5 de Victor.
+             Gagné si au moins 4 des 5 chevaux sont dans le vrai Top5.
+
+Analogie : c'est comme rejouer toutes les courses passées avec de
+l'argent fictif pour voir si la stratégie aurait été rentable.
 """
 
 import pandas as pd
@@ -21,38 +30,32 @@ DOSSIER_MODELS = "models"
 # ─────────────────────────────────────────────
 
 def charger_tout():
-    chemin_model = os.path.join(DOSSIER_MODELS, "victor_v2.pkl")
-    chemin_meta  = os.path.join(DOSSIER_MODELS, "features.json")
-
-    if not os.path.exists(chemin_model):
-        print("❌ Modèle introuvable. Lance d'abord python 3_entrainer_modele.py")
-        exit()
-
-    model = joblib.load(chemin_model)
+    chemin_meta = os.path.join(DOSSIER_MODELS, "features.json")
     with open(chemin_meta) as f:
         meta = json.load(f)
-    features = meta["features"]
+
+    # On utilise le modèle global quinté pour le backtesting principal
+    chemin_model = os.path.join(DOSSIER_MODELS, "victor_v2_GLOBAL_quinte.pkl")
+    if not os.path.exists(chemin_model):
+        chemin_model = os.path.join(DOSSIER_MODELS, "victor_v2.pkl")
+
+    model    = joblib.load(chemin_model)
+    features = meta.get("features_global", meta.get("features", []))
 
     chemin_csv = os.path.join(DOSSIER_DATA, "dataset_final.csv")
     df = pd.read_csv(chemin_csv, encoding="utf-8-sig")
 
     features_dispo = [f for f in features if f in df.columns]
-    df = df.dropna(subset=features_dispo + ["succes", "place"])
+    targets        = ["succes", "succes_trio", "succes_couple", "top1", "place"]
+    targets_dispo  = [t for t in targets if t in df.columns]
 
-    # ✅ Forcer le type numérique avant de filtrer
+    df = df.dropna(subset=features_dispo + ["place"])
     df["cote"] = pd.to_numeric(df["cote"], errors="coerce")
     df = df[df["cote"].notna()].copy()
 
-    # ✅ Filtrer les cotes aberrantes (99.0 = donnée manquante dans l'API)
     avant = len(df)
     df = df[(df["cote"] >= 1.1) & (df["cote"] <= 80.0)].copy()
     print(f"🧹 Cotes filtrées : {avant - len(df)} lignes retirées sur {avant}")
-
-    if len(df) == 0:
-        print("❌ ERREUR : toutes les lignes ont été filtrées.")
-        df_check = pd.read_csv(chemin_csv, encoding="utf-8-sig")
-        print(f"   Exemples de cotes brutes : {df_check['cote'].head(10).tolist()}")
-        exit()
 
     n       = len(df)
     seuil   = int(n * 0.80)
@@ -61,98 +64,129 @@ def charger_tout():
     print(f"📊 Backtesting sur {len(df_test)} lignes (20% les plus récentes)")
     return model, features_dispo, df_test
 
+
 # ─────────────────────────────────────────────
 # CALCUL DES PROBABILITÉS
 # ─────────────────────────────────────────────
 
-def calculer_probas(model, features, df_test):
-    df_test = df_test.copy()
-    df_test["proba"] = model.predict_proba(df_test[features])[:, 1]
-    return df_test
+def calculer_probas(model, features, df):
+    df = df.copy()
+    df["proba"] = model.predict_proba(df[features])[:, 1]
+    return df
+
 
 # ─────────────────────────────────────────────
 # IDENTIFICATION DES COURSES
 # ─────────────────────────────────────────────
 
-def identifier_courses(df_test):
-    df_test = df_test.sort_index().reset_index(drop=True)
-    df_test["course_id"] = (
-        (df_test["nb_partants"] != df_test["nb_partants"].shift()) |
-        (df_test["distance"]    != df_test["distance"].shift())    |
-        (df_test["taux_hippo"]  != df_test["taux_hippo"].shift())
+def identifier_courses(df):
+    df = df.sort_index().reset_index(drop=True)
+    df["course_id"] = (
+        (df["nb_partants"] != df["nb_partants"].shift()) |
+        (df["distance"]    != df["distance"].shift())    |
+        (df["taux_hippo"]  != df["taux_hippo"].shift())
     ).cumsum()
-    return df_test
+    return df
+
 
 # ─────────────────────────────────────────────
 # SIMULATION DES PARIS
 # ─────────────────────────────────────────────
 
 def simuler_paris(df_test):
+    """
+    Pour chaque course, simule les 4 stratégies de paris.
+
+    Gains réalistes estimés :
+    - GAGNANT  : cote réelle du cheval
+    - COUPLE   : cote_1 * cote_2 * 0.65  (approximation marché PMU)
+    - TRIO     : cote_1 * cote_2 * cote_3 * 0.40
+    - QUINTE+  : gain fixe de 50x la mise si 5/5, 15x si 4/5
+    """
     mise = 1.0
 
     stats = {
         "gagnant": {"paris": 0, "gagnes": 0, "mise_totale": 0.0, "gains_totaux": 0.0},
-        "valeur" : {"paris": 0, "gagnes": 0, "mise_totale": 0.0, "gains_totaux": 0.0},
-        "top2"   : {"paris": 0, "gagnes": 0, "mise_totale": 0.0, "gains_totaux": 0.0},
+        "couple" : {"paris": 0, "gagnes": 0, "mise_totale": 0.0, "gains_totaux": 0.0},
+        "trio"   : {"paris": 0, "gagnes": 0, "mise_totale": 0.0, "gains_totaux": 0.0},
+        "quinte" : {"paris": 0, "gagnes": 0, "mise_totale": 0.0, "gains_totaux": 0.0},
     }
 
     nb_courses = 0
 
     for _, groupe in df_test.groupby("course_id"):
-        if len(groupe) < 3:
+        if len(groupe) < 4:
             continue
 
         nb_courses += 1
         g = groupe.sort_values("proba", ascending=False).reset_index(drop=True)
 
-        top1       = g.iloc[0]
-        cote_top1  = min(float(top1["cote"]), 30.0)
-        gagne_top1 = int(top1["top1"]) if "top1" in g.columns else int(top1["succes"])
-        proba_top1 = float(top1["proba"])
+        # Places réelles
+        g["place_int"] = pd.to_numeric(g["place"], errors="coerce").fillna(99).astype(int)
 
-        # ── Stratégie GAGNANT simple ──
+        # Cotes des chevaux sélectionnés
+        cotes = g["cote"].tolist()
+
+        # ── GAGNANT : cheval N°1 de Victor ──
+        top1_place = g.iloc[0]["place_int"]
+        cote_top1  = min(float(g.iloc[0]["cote"]), 50.0)
         stats["gagnant"]["paris"]       += 1
         stats["gagnant"]["mise_totale"] += mise
-        if gagne_top1:
+        if top1_place == 1:
             stats["gagnant"]["gagnes"]       += 1
             stats["gagnant"]["gains_totaux"] += mise * cote_top1
 
-        # ── Stratégie VALEUR ──
-        # Confiance > 30% ET cote entre 2.5 et 15.0
-        if proba_top1 > 0.30 and 2.5 < cote_top1 < 15.0:
-            stats["valeur"]["paris"]       += 1
-            stats["valeur"]["mise_totale"] += mise
-            if gagne_top1:
-                stats["valeur"]["gagnes"]       += 1
-                stats["valeur"]["gains_totaux"] += mise * cote_top1
+        # ── COUPLÉ : Top2 Victor dans le vrai Top2 ──
+        if len(g) >= 2:
+            top2_places = set(g.iloc[:2]["place_int"].tolist())
+            cote_c1     = min(float(g.iloc[0]["cote"]), 30.0)
+            cote_c2     = min(float(g.iloc[1]["cote"]), 30.0)
+            gain_couple = cote_c1 * cote_c2 * 0.65
+            stats["couple"]["paris"]       += 1
+            stats["couple"]["mise_totale"] += mise
+            if top2_places <= {1, 2}:
+                stats["couple"]["gagnes"]       += 1
+                stats["couple"]["gains_totaux"] += mise * gain_couple
 
-        # ── Stratégie TOP2 ──
-        if len(g) > 1:
-            top2_succes = int(g.iloc[0]["succes"]) + int(g.iloc[1]["succes"])
-            cote2       = min(float(g.iloc[1]["cote"]), 30.0)
-            cote_moy    = (cote_top1 + cote2) / 2
-        else:
-            top2_succes = int(g.iloc[0]["succes"])
-            cote_moy    = cote_top1
+        # ── TRIO : Top3 Victor dans le vrai Top3 ──
+        if len(g) >= 3:
+            top3_places = set(g.iloc[:3]["place_int"].tolist())
+            cote_t1     = min(float(g.iloc[0]["cote"]), 20.0)
+            cote_t2     = min(float(g.iloc[1]["cote"]), 20.0)
+            cote_t3     = min(float(g.iloc[2]["cote"]), 20.0)
+            gain_trio   = cote_t1 * cote_t2 * cote_t3 * 0.40
+            stats["trio"]["paris"]       += 1
+            stats["trio"]["mise_totale"] += mise
+            if top3_places <= {1, 2, 3}:
+                stats["trio"]["gagnes"]       += 1
+                stats["trio"]["gains_totaux"] += mise * gain_trio
 
-        stats["top2"]["paris"]       += 1
-        stats["top2"]["mise_totale"] += mise
-        if top2_succes >= 1:
-            stats["top2"]["gagnes"]       += 1
-            stats["top2"]["gains_totaux"] += mise * max(1.5, cote_moy * 0.4)
+        # ── QUINTÉ : Top5 Victor vs vrai Top5 ──
+        if len(g) >= 5:
+            top5_victor = set(g.iloc[:5]["place_int"].tolist())
+            top5_reel   = {1, 2, 3, 4, 5}
+            communs     = len(top5_victor & top5_reel)
+            stats["quinte"]["paris"]       += 1
+            stats["quinte"]["mise_totale"] += mise
+            if communs >= 5:
+                stats["quinte"]["gagnes"]       += 1
+                stats["quinte"]["gains_totaux"] += mise * 50.0  # 5/5 ordre libre
+            elif communs >= 4:
+                stats["quinte"]["gagnes"]       += 1
+                stats["quinte"]["gains_totaux"] += mise * 8.0   # 4/5 bonus
 
     return stats, nb_courses
+
 
 # ─────────────────────────────────────────────
 # AFFICHAGE
 # ─────────────────────────────────────────────
 
 def afficher_resultats(stats, nb_courses):
-    print("\n" + "="*58)
-    print("💰 RÉSULTATS DU BACKTESTING — VICTOR V2")
-    print("="*58)
+    print("\n" + "="*60)
+    print("💰 RÉSULTATS DU BACKTESTING — VICTOR V2 v4")
+    print("="*60)
     print(f"  Courses analysées : {nb_courses}")
-    print(f"  (cotes filtrées : 1.1 → 30.0 max)")
     print()
 
     for nom, s in stats.items():
@@ -162,9 +196,9 @@ def afficher_resultats(stats, nb_courses):
         roi    = ((s["gains_totaux"] - s["mise_totale"]) / s["mise_totale"]) * 100
         taux   = (s["gagnes"] / s["paris"]) * 100
         profit = s["gains_totaux"] - s["mise_totale"]
+        emoji  = "✅" if roi > 0 else "❌"
 
-        emoji = "✅" if roi > 0 else "❌"
-        print(f"  {'─'*50}")
+        print(f"  {'─'*55}")
         print(f"  🎯 Stratégie : {nom.upper()}")
         print(f"     Paris joués    : {s['paris']}")
         print(f"     Paris gagnés   : {s['gagnes']} ({taux:.1f}%)")
@@ -173,41 +207,51 @@ def afficher_resultats(stats, nb_courses):
         print(f"     Profit net     : {profit:+.1f} unités")
         print(f"     ROI            : {emoji} {roi:+.1f}%")
 
-    print(f"\n  {'─'*50}")
-    print("  📌 Note : ROI calculé sur données jamais vues")
-    print("  pendant l'entraînement. Cotes plafonnées à 30.")
-    print("="*58)
+    print(f"\n  {'─'*55}")
+    print("  📌 Gains estimés sur base marché PMU réel")
+    print("  📌 QUINTÉ : 50x si 5/5, 8x si 4/5")
+    print("="*60)
 
+    # Interprétation globale
     roi_gagnant = ((stats["gagnant"]["gains_totaux"] - stats["gagnant"]["mise_totale"])
                    / max(stats["gagnant"]["mise_totale"], 1)) * 100
+    roi_quinte  = ((stats["quinte"]["gains_totaux"] - stats["quinte"]["mise_totale"])
+                   / max(stats["quinte"]["mise_totale"], 1)) * 100
 
     print("\n🧠 INTERPRÉTATION :")
-    if roi_gagnant > 10:
-        print("  🟢 Excellent — système rentable.")
-        print("     Tu peux tester avec de petites mises réelles.")
-    elif roi_gagnant > 0:
-        print("  🟡 Positif mais fragile — rentable sur le passé.")
-        print("     Continue à alimenter avec des données fraîches.")
-    elif roi_gagnant > -15:
-        print("  🟠 Légèrement négatif — normal à ce stade.")
-        print("     Lance Optuna pour optimiser le modèle.")
+    print(f"  Gagnant ROI : {roi_gagnant:+.1f}%")
+    print(f"  Quinté  ROI : {roi_quinte:+.1f}%")
+
+    if roi_gagnant > 5:
+        print("  🟢 Gagnant rentable — système valide pour mises réelles.")
+    elif roi_gagnant > -10:
+        print("  🟡 Gagnant légèrement négatif — lance Optuna pour optimiser.")
     else:
-        print("  🔴 Négatif — ne mise pas d'argent réel.")
-        print("     Relance 9_optimiser_optuna.py et collecte plus de données.")
+        print("  🔴 Gagnant négatif — collecte plus de données récentes.")
+
+    if roi_quinte > 0:
+        print("  🟢 Quinté rentable — bon signal pour le Quinté Afrique.")
+    else:
+        print("  🟡 Quinté négatif — normal, le Quinté exact est très difficile.")
+        print("     Concentre-toi sur la stratégie GAGNANT ou COUPLE.")
+
+    print("="*60)
+
 
 # ─────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────
 
 def main():
-    print("🏇 VICTOR V2 — BACKTESTING ROI (v3 corrigé)")
-    print("="*58)
+    print("🏇 VICTOR V2 — BACKTESTING ROI v4")
+    print("="*60)
 
     model, features, df_test = charger_tout()
     df_test = calculer_probas(model, features, df_test)
     df_test = identifier_courses(df_test)
     stats, nb_courses = simuler_paris(df_test)
     afficher_resultats(stats, nb_courses)
+
 
 if __name__ == "__main__":
     main()
