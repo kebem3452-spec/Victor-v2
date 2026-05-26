@@ -81,7 +81,7 @@ jobs:
   # ───────────────────────────────────────────────────────────
   soir-resultats:
     if: |
-      github.event.schedule == '0 20 * * *' ||
+      github.event.schedule == '0 12,16,20 * * *' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'soir')
     runs-on: ubuntu-latest
     steps:
