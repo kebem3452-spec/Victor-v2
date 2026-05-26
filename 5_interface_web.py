@@ -63,7 +63,7 @@ st.markdown("""<style>
 
 .result-box  { background:#1D9E7511; border:1px solid #1D9E7544; border-radius:10px; padding:12px; margin-top:10px; }
 .result-title{ font-size:12px; color:#1D9E75; font-weight:700; margin-bottom:4px; }
-.result-val  { font-size:16px; font-weight:800; color:#ffffff; }
+.result-val  { font-size:16px; font-weight:800; color:#FF0000; }
 .cta-box     { background:#1a1c23; border:1px solid #2d3139; border-radius:10px; padding:12px; margin-top:12px; text-align:center; }
 .cta-box a   { color:#1D9E75; text-decoration:none; font-weight:700; font-size:13px; }
 
