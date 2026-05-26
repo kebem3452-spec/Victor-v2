@@ -1,13 +1,14 @@
 """
-VICTOR V2 — Étape 2 : Feature Engineering v4
+VICTOR V2 — Étape 2 : Feature Engineering v6
 =============================================
 Entrée  : data/raw_courses.csv
 Sortie  : data/dataset_final.csv
 
-Corrections v4 :
-- Météo appliquée via merge rapide (pas de apply ligne par ligne)
-- Météo ne retélécharge que les nouvelles dates manquantes
-- Compatible avec 800 jours de données
+Nouveautés v6 :
+- 3 nouvelles features terrain : jours_repos, changement_jockey, ecart_distance_opt
+- Mapping discipline FIGÉ
+- 4 targets : succes, succes_trio, succes_couple, top1
+- Météo via merge rapide
 """
 
 import pandas as pd
@@ -16,6 +17,16 @@ import os
 from utils import decoder_musique
 
 DOSSIER = "data"
+
+# Mapping discipline FIGÉ — ne jamais changer
+DISCIPLINE_MAP = {
+    "ATTELE"      : 0,
+    "CROSS"       : 1,
+    "HAIE"        : 2,
+    "MONTE"       : 3,
+    "PLAT"        : 4,
+    "STEEPLECHASE": 5,
+}
 
 # ─────────────────────────────────────────────
 # 1. CHARGEMENT
@@ -50,12 +61,14 @@ def nettoyer(df):
     return df.reset_index(drop=True)
 
 # ─────────────────────────────────────────────
-# 3. TARGET
+# 3. TARGETS — 4 types de paris
 # ─────────────────────────────────────────────
 
 def creer_target(df):
-    df["succes"] = (df["place"] <= 5).astype(int)
-    df["top1"]   = (df["place"] == 1).astype(int)
+    df["succes"]        = (df["place"] <= 5).astype(int)  # Quinté  → Top 5
+    df["succes_trio"]   = (df["place"] <= 3).astype(int)  # Trio    → Top 3
+    df["succes_couple"] = (df["place"] <= 2).astype(int)  # Couplé  → Top 2
+    df["top1"]          = (df["place"] == 1).astype(int)  # Gagnant → 1er
     return df
 
 # ─────────────────────────────────────────────
@@ -64,7 +77,7 @@ def creer_target(df):
 
 def extraire_stats_musique(musique):
     defaut = {"forme_recente": 5.0, "forme_10": 5.0,
-               "meilleure_place": 10, "regularite": 3.0, "momentum": 0.0}
+              "meilleure_place": 10, "regularite": 3.0, "momentum": 0.0}
     if not isinstance(musique, str) or musique == "":
         return defaut
 
@@ -84,19 +97,19 @@ def extraire_stats_musique(musique):
     if not places:
         return defaut
 
-    penalite  = 3.0 if places.count(15) >= 2 else 0.0
-    recent5   = places[-5:]
-    poids5    = list(range(1, len(recent5) + 1))
+    penalite      = 3.0 if places.count(15) >= 2 else 0.0
+    recent5       = places[-5:]
+    poids5        = list(range(1, len(recent5) + 1))
     forme_recente = round(
         sum(p * w for p, w in zip(recent5, poids5)) / sum(poids5) + penalite, 2)
-    recent10  = places[-10:]
-    poids10   = list(range(1, len(recent10) + 1))
-    forme_10  = round(
+    recent10      = places[-10:]
+    poids10       = list(range(1, len(recent10) + 1))
+    forme_10      = round(
         sum(p * w for p, w in zip(recent10, poids10)) / sum(poids10) + penalite, 2)
     meilleure_place = int(min(places))
-    regularite = round(
+    regularite    = round(
         float(np.std(places[-10:])) if len(places) >= 2 else 3.0, 2)
-    momentum   = round(
+    momentum      = round(
         float(np.mean(places[-6:-3]) - np.mean(places[-3:])), 2
     ) if len(places) >= 6 else 0.0
 
@@ -164,19 +177,77 @@ def ajouter_stats_historiques(df):
     return df
 
 # ─────────────────────────────────────────────
+# 5b. NOUVELLES FEATURES TERRAIN
+# ─────────────────────────────────────────────
+
+def ajouter_features_terrain(df):
+    """
+    3 nouvelles features basées sur l'historique du cheval :
+
+    jours_repos        : nb de jours depuis la dernière course
+                         Fenêtre optimale = 14 à 28 jours
+                         Trop peu (< 7j) = cheval fatigué
+                         Trop long (> 60j) = cheval rouillé
+
+    changement_jockey  : 1 si le jockey est différent de la dernière course
+                         Signal fort — un meilleur jockey = amélioration attendue
+
+    ecart_distance_opt : écart relatif entre la distance d'aujourd'hui
+                         et la distance où le cheval gagne le plus souvent
+                         Plus c'est proche de 0, mieux c'est
+    """
+    df = df.copy()
+    df["date"] = pd.to_datetime(df["date"])
+    df = df.sort_values(["nom_cheval", "date"]).reset_index(drop=True)
+
+    # ── Jours de repos ──
+    df["date_precedente"]  = df.groupby("nom_cheval")["date"].shift(1)
+    df["jours_repos"]      = (df["date"] - df["date_precedente"]).dt.days.fillna(30)
+    df["jours_repos"]      = df["jours_repos"].clip(1, 120)
+
+    # ── Changement de jockey ──
+    df["jockey_precedent"] = df.groupby("nom_cheval")["nom_jockey"].shift(1)
+    df["changement_jockey"] = (
+        (df["nom_jockey"] != df["jockey_precedent"]) &
+        df["jockey_precedent"].notna()
+    ).astype(int)
+
+    # ── Distance vs distance optimale ──
+    # Distance optimale = médiane des distances où le cheval a fini Top5
+    dist_opt = (
+        df[df["succes"] == 1]
+        .groupby("nom_cheval")["distance"]
+        .median()
+        .rename("distance_optimale")
+    )
+    df = df.merge(dist_opt, on="nom_cheval", how="left")
+    df["distance_optimale"]  = df["distance_optimale"].fillna(df["distance"])
+    df["ecart_distance_opt"] = (
+        (df["distance"] - df["distance_optimale"]).abs()
+        / df["distance_optimale"].clip(lower=1)
+    ).round(4)
+
+    # Nettoyage colonnes temporaires
+    df = df.drop(columns=["date_precedente", "jockey_precedent",
+                           "distance_optimale"], errors="ignore")
+
+    print("✅ Features terrain ajoutées (jours_repos, changement_jockey, ecart_distance_opt)")
+    return df
+
+# ─────────────────────────────────────────────
 # 6. FEATURES CONTEXTUELLES
 # ─────────────────────────────────────────────
 
 def ajouter_features_course(df):
-    df["rang_cote"]       = df.groupby(
+    df["rang_cote"]   = df.groupby(
         ["date", "num_reunion", "num_course"])["cote"].rank(method="min")
-    df["est_favori"]      = (df["rang_cote"] == 1).astype(int)
-    df["log_cote"]        = np.log1p(df["cote"])
-    df["nb_partants"]     = df.groupby(
+    df["est_favori"]  = (df["rang_cote"] == 1).astype(int)
+    df["log_cote"]    = np.log1p(df["cote"])
+    df["nb_partants"] = df.groupby(
         ["date", "num_reunion", "num_course"])["nom_cheval"].transform("count")
-    df["taux_saison"]     = (
+    df["taux_saison"] = (
         df["nb_victoires_saison"] / (df["nb_courses_saison"] + 1)).round(4)
-    df["discipline_code"] = df["discipline"].astype("category").cat.codes
+    df["discipline_code"] = df["discipline"].map(DISCIPLINE_MAP).fillna(0).astype(int)
     print("✅ Features contextuelles ajoutées")
     return df
 
@@ -196,17 +267,6 @@ def encoder_categoriques(df):
 # ─────────────────────────────────────────────
 
 def ajouter_meteo(df):
-    """
-    Enrichit le dataset avec les données météo.
-
-    Fonctionnement :
-    1. Charge le cache météo existant (une seule lecture disque)
-    2. Identifie les combinaisons (date, hippodrome) MANQUANTES dans le cache
-    3. Télécharge UNIQUEMENT les nouvelles — pas les 800 jours déjà présents
-    4. Fusionne avec le dataset via un merge rapide (pas de apply ligne par ligne)
-
-    Résultat : quelques secondes au lieu de 20 minutes.
-    """
     if "date" not in df.columns or "hippodrome" not in df.columns:
         return df
 
@@ -219,16 +279,13 @@ def ajouter_meteo(df):
         if "heure" not in df.columns:
             df["heure"] = "14:00"
 
-        # ── Étape 1 : charger le cache existant UNE SEULE FOIS ──
         cache = mod.charger_cache()
         print(f"🌤️  Cache météo : {len(cache)} entrées existantes")
 
-        # ── Étape 2 : identifier les combinaisons UNIQUES dans le dataset ──
         combos_dataset = df[["date", "hippodrome", "heure"]].drop_duplicates()
-        combos_dataset["date_str"]   = combos_dataset["date"].astype(str)
-        combos_dataset["hippo_str"]  = combos_dataset["hippodrome"].astype(str)
+        combos_dataset["date_str"]  = combos_dataset["date"].astype(str)
+        combos_dataset["hippo_str"] = combos_dataset["hippodrome"].astype(str)
 
-        # Combinaisons déjà en cache
         if len(cache) > 0:
             cache["date_str"]  = cache["date"].astype(str)
             cache["hippo_str"] = cache["hippodrome"].astype(str)
@@ -236,7 +293,6 @@ def ajouter_meteo(df):
         else:
             cache_set = set()
 
-        # Combinaisons manquantes = à télécharger
         manquantes = combos_dataset[
             ~combos_dataset.apply(
                 lambda r: (r["date_str"], r["hippo_str"]) in cache_set,
@@ -248,8 +304,8 @@ def ajouter_meteo(df):
         print(f"   Déjà en cache               : {len(combos_dataset) - len(manquantes)}")
         print(f"   À télécharger               : {len(manquantes)}")
 
-        # ── Étape 3 : télécharger uniquement les manquantes ──
         if len(manquantes) > 0:
+            import time
             nouvelles_lignes = []
             for _, row in manquantes.iterrows():
                 meteo = mod.get_meteo(
@@ -266,28 +322,23 @@ def ajouter_meteo(df):
                     "vent_kmh"     : meteo["vent_kmh"],
                     "terrain_lourd": meteo["terrain_lourd"],
                 })
-                import time
                 time.sleep(0.3)
 
-            # Sauvegarder les nouvelles dans le cache
             df_nouvelles = pd.DataFrame(nouvelles_lignes)
             cache_maj    = pd.concat([cache, df_nouvelles], ignore_index=True)\
-                             .drop_duplicates(subset=["date","hippodrome"], keep="last")
+                             .drop_duplicates(subset=["date", "hippodrome"], keep="last")
             mod.sauvegarder_cache(cache_maj)
-            print(f"   ✅ {len(nouvelles_lignes)} nouvelles météos téléchargées et sauvegardées")
+            print(f"   ✅ {len(nouvelles_lignes)} nouvelles météos sauvegardées")
             cache = cache_maj
 
-        # ── Étape 4 : merge rapide (remplace le apply ligne par ligne) ──
-        # On prépare une table de lookup (date, hippodrome) → météo
-        cache_clean = cache[["date","hippodrome",
-                               "temperature","precipitation",
-                               "vent_kmh","terrain_lourd"]].copy()
+        cache_clean = cache[["date", "hippodrome",
+                              "temperature", "precipitation",
+                              "vent_kmh", "terrain_lourd"]].copy()
         cache_clean["date"]       = cache_clean["date"].astype(str)
         cache_clean["hippodrome"] = cache_clean["hippodrome"].astype(str)
         cache_clean = cache_clean.drop_duplicates(
-            subset=["date","hippodrome"], keep="last")
+            subset=["date", "hippodrome"], keep="last")
 
-        # Préparer le df pour le merge
         df["date_merge"]  = df["date"].astype(str)
         df["hippo_merge"] = df["hippodrome"].astype(str)
 
@@ -296,20 +347,17 @@ def ajouter_meteo(df):
                 "date"      : "date_merge",
                 "hippodrome": "hippo_merge"
             }),
-            on=["date_merge","hippo_merge"],
+            on=["date_merge", "hippo_merge"],
             how="left"
         )
 
-        # Remplir les valeurs manquantes avec des valeurs neutres
         df["temperature"]   = df["temperature"].fillna(15.0)
         df["precipitation"] = df["precipitation"].fillna(0.0)
         df["vent_kmh"]      = df["vent_kmh"].fillna(10.0)
         df["terrain_lourd"] = df["terrain_lourd"].fillna(0).astype(int)
+        df = df.drop(columns=["date_merge", "hippo_merge"], errors="ignore")
 
-        # Nettoyer les colonnes temporaires
-        df = df.drop(columns=["date_merge","hippo_merge"], errors="ignore")
-
-        print("✅ Météo ajoutée via merge rapide : temperature, precipitation, vent_kmh, terrain_lourd")
+        print("✅ Météo ajoutée via merge rapide")
 
     except Exception as e:
         print(f"⚠️  Météo ignorée ({e})")
@@ -325,21 +373,31 @@ def ajouter_meteo(df):
 # ─────────────────────────────────────────────
 
 FEATURES_FINALES = [
+    # Features de base
     "cote", "log_cote", "rang_cote", "est_favori",
     "nb_partants", "distance", "discipline_code", "allocation",
+    # Forme
     "forme_recente", "forme_10", "meilleure_place", "regularite", "momentum",
+    # Stats historiques
     "taux_victoire_cheval", "taux_victoire_jockey",
     "taux_hippo_cheval", "taux_distance",
     "taux_saison", "nb_victoires_saison", "nb_courses_saison",
+    # Cheval
     "age", "poids", "taux_hippo",
+    # Météo
     "temperature", "precipitation", "vent_kmh", "terrain_lourd",
-    "succes", "top1", "place",
+    # NOUVELLES features terrain
+    "jours_repos", "changement_jockey", "ecart_distance_opt",
+    # Targets et labels
+    "succes", "succes_trio", "succes_couple", "top1", "place",
+    "date", "num_reunion", "num_course",
 ]
 
 def selectionner_features(df):
     colonnes = [c for c in FEATURES_FINALES if c in df.columns]
     df_final = df[colonnes].copy()
-    feats    = [c for c in colonnes if c not in ("succes","top1","place")]
+    feats    = [c for c in colonnes if c not in
+                ("succes", "succes_trio", "succes_couple", "top1", "place")]
     print(f"✅ {len(feats)} features retenues")
     return df_final
 
@@ -353,6 +411,7 @@ def main():
     df = creer_target(df)
     df = ajouter_forme(df)
     df = ajouter_stats_historiques(df)
+    df = ajouter_features_terrain(df)
     df = ajouter_features_course(df)
     df = encoder_categoriques(df)
     df = ajouter_meteo(df)
@@ -362,9 +421,13 @@ def main():
     df_final.to_csv(chemin, index=False, encoding="utf-8-sig")
 
     print(f"\n💾 Dataset final : {chemin}")
-    print(f"   Lignes   : {len(df_final)}")
-    print(f"   Succès   : {df_final['succes'].sum()} ({df_final['succes'].mean()*100:.1f}%)")
-    print(f"   Colonnes : {list(df_final.columns)}")
+    print(f"   Lignes        : {len(df_final)}")
+    print(f"   Features      : {len([c for c in df_final.columns if c not in ('succes','succes_trio','succes_couple','top1','place')])}")
+    print(f"   Quinté (<=5)  : {df_final['succes'].sum()} ({df_final['succes'].mean()*100:.1f}%)")
+    print(f"   Trio   (<=3)  : {df_final['succes_trio'].sum()} ({df_final['succes_trio'].mean()*100:.1f}%)")
+    print(f"   Couplé (<=2)  : {df_final['succes_couple'].sum()} ({df_final['succes_couple'].mean()*100:.1f}%)")
+    print(f"   Gagnant (=1)  : {df_final['top1'].sum()} ({df_final['top1'].mean()*100:.1f}%)")
+    print(f"\n✅ Lance maintenant : python 3_entrainer_modele.py")
 
 if __name__ == "__main__":
     main()
