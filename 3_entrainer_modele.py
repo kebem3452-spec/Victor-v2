@@ -1,17 +1,13 @@
 """
-VICTOR V2 — Étape 3 : Entraînement multi-modèles par discipline
-===============================================================
+VICTOR V2 — Étape 3 : Entraînement 4 modèles (Quinté / Trio / Couplé / Gagnant)
+================================================================================
 Entrée  : data/dataset_final.csv
-Sortie  : models/victor_v2_PLAT.pkl
-          models/victor_v2_TROT.pkl
-          models/victor_v2_OBSTACLE.pkl
-          models/victor_v2_GLOBAL.pkl  (fallback toutes disciplines)
+Sortie  : models/victor_v2_GLOBAL_quinte.pkl
+          models/victor_v2_GLOBAL_trio.pkl
+          models/victor_v2_GLOBAL_couple.pkl
+          models/victor_v2_GLOBAL_gagnant.pkl
+          models/victor_v2_{DISCIPLINE}_quinte.pkl  (un par discipline)
           models/features.json
-
-Nouveauté v3 :
-- Un modèle entraîné PAR discipline (PLAT, TROT, OBSTACLE)
-- Un modèle global en fallback si la discipline est inconnue
-- 23 features au lieu de 17
 """
 
 import pandas as pd
@@ -20,7 +16,7 @@ import lightgbm as lgb
 import joblib
 import json
 import os
-from sklearn.metrics import roc_auc_score, classification_report
+from sklearn.metrics import roc_auc_score
 
 DOSSIER_DATA   = "data"
 DOSSIER_MODELS = "models"
@@ -34,44 +30,90 @@ FEATURES = [
     "taux_hippo_cheval", "taux_distance",
     "taux_saison", "nb_victoires_saison", "nb_courses_saison",
     "age", "poids", "taux_hippo",
+    "temperature", "precipitation", "vent_kmh", "terrain_lourd",
+    "jours_repos", "changement_jockey", "ecart_distance_opt",
 ]
-TARGET = "succes"
 
-# Mapping discipline_code → nom lisible
-DISC_NOMS = {0: "CROSS", 1: "OBSTACLE", 2: "PLAT", 3: "TROT_ATTELE", 4: "TROT_MONTE"}
+# Mapping figé — NE JAMAIS CHANGER
+DISC_NOMS = {
+    0: "ATTELE",
+    1: "CROSS",
+    2: "HAIE",
+    3: "MONTE",
+    4: "PLAT",
+    5: "STEEPLECHASE",
+}
+
+# Les 4 types de paris avec leur target et leur seuil de place
+PARIS = {
+    "quinte" : {"target": "succes",        "place_max": 5},
+    "trio"   : {"target": "succes_trio",   "place_max": 3},
+    "couple" : {"target": "succes_couple", "place_max": 2},
+    "gagnant": {"target": "top1",          "place_max": 1},
+}
+
 
 # ─────────────────────────────────────────────
-# FONCTIONS COMMUNES
+# CHARGEMENT
 # ─────────────────────────────────────────────
 
 def charger():
     chemin = os.path.join(DOSSIER_DATA, "dataset_final.csv")
     df = pd.read_csv(chemin, encoding="utf-8-sig")
 
-    # Garder seulement les features disponibles
     features_dispo = [f for f in FEATURES if f in df.columns]
-    manquantes = [f for f in FEATURES if f not in df.columns]
+    manquantes     = [f for f in FEATURES if f not in df.columns]
     if manquantes:
-        print(f"⚠️  Features absentes du CSV (seront ignorées) : {manquantes}")
+        print(f"⚠️  Features absentes : {manquantes}")
 
-    df = df.dropna(subset=features_dispo + [TARGET])
-    print(f"📥 Dataset : {len(df)} lignes | Succès : {df[TARGET].mean()*100:.1f}%")
+    # Vérifier que les 4 targets existent
+    for nom_pari, cfg in PARIS.items():
+        if cfg["target"] not in df.columns:
+            print(f"❌ Colonne '{cfg['target']}' manquante — "
+                  f"relance d'abord python 2_feature_engineering.py")
+            exit()
+
+    df = df.dropna(subset=features_dispo)
+    print(f"📥 Dataset : {len(df)} lignes | Features : {len(features_dispo)}")
     return df, features_dispo
 
+
+# ─────────────────────────────────────────────
+# SPLIT TEMPOREL
+# ─────────────────────────────────────────────
+
 def split_temporel(df):
-    n     = len(df)
-    seuil = int(n * 0.80)
-    train = df.iloc[:seuil]
-    test  = df.iloc[seuil:]
-    print(f"✂️  Train : {len(train)} | Test : {len(test)}")
+    if "date" not in df.columns:
+        n     = len(df)
+        seuil = int(n * 0.80)
+        train = df.iloc[:seuil]
+        test  = df.iloc[seuil:]
+        print(f"  ✂️  Train : {len(train)} | Test : {len(test)}")
+        return train, test
+
+    dates_triees  = sorted(df["date"].unique())
+    seuil_idx     = int(len(dates_triees) * 0.80)
+    date_coupure  = dates_triees[seuil_idx]
+
+    train = df[df["date"] <  date_coupure].copy()
+    test  = df[df["date"] >= date_coupure].copy()
+    print(f"  ✂️  Train : {len(train)} lignes jusqu'au {date_coupure}")
+    print(f"       Test  : {len(test)} lignes  à partir du {date_coupure}")
     return train, test
 
-def entrainer_un_modele(train, test, features, label="GLOBAL"):
-    X_train, y_train = train[features], train[TARGET]
-    X_test,  y_test  = test[features],  test[TARGET]
+
+# ─────────────────────────────────────────────
+# ENTRAÎNEMENT D'UN MODÈLE
+# ─────────────────────────────────────────────
+
+def entrainer(train, test, features, target, label):
+    X_train = train[features]
+    y_train = train[target]
+    X_test  = test[features]
+    y_test  = test[target]
 
     if len(y_train) < 100:
-        print(f"  ⚠️  Pas assez de données pour {label} ({len(y_train)} lignes) — ignoré")
+        print(f"  ⚠️  {label} : pas assez de données ({len(y_train)}) — ignoré")
         return None, 0.0
 
     ratio = max(1.0, (y_train == 0).sum() / max((y_train == 1).sum(), 1))
@@ -102,86 +144,102 @@ def entrainer_un_modele(train, test, features, label="GLOBAL"):
         ],
     )
 
-    y_proba = model.predict_proba(X_test)[:, 1]
-    auc     = roc_auc_score(y_test, y_proba)
-    print(f"  ✅ {label} — AUC : {auc*100:.1f}% ({len(train)} lignes train)")
+    auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
+    print(f"  ✅ {label:<35} AUC : {auc*100:.1f}%")
     return model, auc
 
+
 # ─────────────────────────────────────────────
-# ENTRAÎNEMENT PAR DISCIPLINE
+# MAIN
 # ─────────────────────────────────────────────
 
 def main():
     df, features = charger()
+    meta = {"modeles": {}, "features_global": features, "paris": {}}
 
-    print("\n" + "="*55)
-    print("🏇 ENTRAÎNEMENT GLOBAL (toutes disciplines)")
-    print("="*55)
-    train_g, test_g   = split_temporel(df)
-    model_g, auc_g    = entrainer_un_modele(train_g, test_g, features, "GLOBAL")
+    # ── 1. Modèles GLOBAUX (toutes disciplines) ──
+    print("\n" + "="*58)
+    print("🌍 MODÈLES GLOBAUX")
+    print("="*58)
+    train_g, test_g = split_temporel(df)
 
-    resultats = {"GLOBAL": {"model": model_g, "auc": auc_g, "features": features}}
+    for nom_pari, cfg in PARIS.items():
+        print(f"\n── Global {nom_pari.upper()} ──")
+        model, auc = entrainer(
+            train_g, test_g, features,
+            target=cfg["target"],
+            label=f"GLOBAL_{nom_pari}"
+        )
+        if model:
+            fichier = f"victor_v2_GLOBAL_{nom_pari}.pkl"
+            joblib.dump(model, os.path.join(DOSSIER_MODELS, fichier))
+            meta["modeles"][f"GLOBAL_{nom_pari}"] = {
+                "fichier"  : fichier,
+                "auc"      : round(auc, 4),
+                "features" : features,
+                "pari"     : nom_pari,
+                "place_max": cfg["place_max"],
+            }
 
-    print("\n" + "="*55)
-    print("🎯 ENTRAÎNEMENT PAR DISCIPLINE")
-    print("="*55)
+    # ── 2. Modèles PAR DISCIPLINE pour le Quinté ──
+    print("\n" + "="*58)
+    print("🎯 MODÈLES PAR DISCIPLINE (Quinté uniquement)")
+    print("="*58)
 
-    for code, nom in DISC_NOMS.items():
+    feats_disc = [f for f in features if f != "discipline_code"]
+
+    for code, nom_disc in DISC_NOMS.items():
         df_disc = df[df["discipline_code"] == code]
-        if len(df_disc) < 200:
-            print(f"  ⏭️  {nom} : seulement {len(df_disc)} lignes — pas assez pour un modèle dédié")
+        if len(df_disc) < 300:
+            print(f"  ⏭️  {nom_disc} : {len(df_disc)} lignes — pas assez")
             continue
 
-        print(f"\n── {nom} ({len(df_disc)} lignes) ──")
-
-        # Pour un modèle par discipline, on retire discipline_code (inutile)
-        feats_disc = [f for f in features if f != "discipline_code"]
+        print(f"\n── {nom_disc} ({len(df_disc)} lignes) ──")
         train_d, test_d = split_temporel(df_disc)
-        model_d, auc_d  = entrainer_un_modele(train_d, test_d, feats_disc, nom)
+        model, auc = entrainer(
+            train_d, test_d, feats_disc,
+            target="succes",
+            label=f"{nom_disc}_quinte"
+        )
+        if model:
+            fichier = f"victor_v2_{nom_disc}_quinte.pkl"
+            joblib.dump(model, os.path.join(DOSSIER_MODELS, fichier))
+            meta["modeles"][f"{nom_disc}_quinte"] = {
+                "fichier"  : fichier,
+                "auc"      : round(auc, 4),
+                "features" : feats_disc,
+                "pari"     : "quinte",
+                "place_max": 5,
+            }
 
-        if model_d is not None:
-            resultats[nom] = {"model": model_d, "auc": auc_d, "features": feats_disc}
+    # ── Compatibilité ancienne interface ──
+    modele_global_quinte = os.path.join(DOSSIER_MODELS, "victor_v2_GLOBAL_quinte.pkl")
+    compat = os.path.join(DOSSIER_MODELS, "victor_v2.pkl")
+    if os.path.exists(modele_global_quinte):
+        import shutil
+        shutil.copy(modele_global_quinte, compat)
+        print(f"\n  📎 Copie compat : victor_v2.pkl = GLOBAL_quinte")
 
-    # ─── Sauvegarde ───
-    print("\n" + "="*55)
-    print("💾 SAUVEGARDE")
-    print("="*55)
-
-    meta = {"modeles": {}, "features_global": features}
-
-    for nom, res in resultats.items():
-        if res["model"] is None:
-            continue
-        chemin = os.path.join(DOSSIER_MODELS, f"victor_v2_{nom}.pkl")
-        joblib.dump(res["model"], chemin)
-        meta["modeles"][nom] = {
-            "fichier" : f"victor_v2_{nom}.pkl",
-            "auc"     : round(res["auc"], 4),
-            "features": res["features"],
-        }
-        print(f"  ✅ {chemin} (AUC {res['auc']*100:.1f}%)")
-
-    # Compatibilité avec l'ancienne interface (victor_v2.pkl = modèle global)
-    if model_g:
-        joblib.dump(model_g, os.path.join(DOSSIER_MODELS, "victor_v2.pkl"))
-
-    meta["auc"]      = round(auc_g, 4)
-    meta["features"] = features
-    meta["accuracy"] = 0.0
-    meta["target"]   = TARGET
+    # ── Sauvegarde features.json ──
+    meta["features"]   = features
+    meta["target"]     = "succes"
     meta["n_features"] = len(features)
+    meta["auc"]        = meta["modeles"].get(
+        "GLOBAL_quinte", {}).get("auc", 0.0)
+    meta["disc_map"]   = DISC_NOMS
 
     with open(os.path.join(DOSSIER_MODELS, "features.json"), "w") as f:
         json.dump(meta, f, indent=2)
 
-    print(f"\n  ✅ features.json sauvegardé")
-    print("\n" + "="*55)
-    print("🏆 Entraînement terminé !")
-    print(f"   Modèle global AUC : {auc_g*100:.1f}%")
-    for nom, res in resultats.items():
-        if nom != "GLOBAL" and res["model"] is not None:
-            print(f"   Modèle {nom:<12} AUC : {res['auc']*100:.1f}%")
-    print("="*55)
+    # ── Résumé final ──
+    print("\n" + "="*58)
+    print("🏆 ENTRAÎNEMENT TERMINÉ")
+    print("="*58)
+    for nom, res in meta["modeles"].items():
+        print(f"  ✅ {nom:<35} AUC : {res['auc']*100:.1f}%")
+    print("="*58)
+    print("\n✅ Lance maintenant : python 7_backtesting.py")
+
 
 if __name__ == "__main__":
     main()
