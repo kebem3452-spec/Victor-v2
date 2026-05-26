@@ -48,7 +48,7 @@ st.markdown("""<style>
 
 .horse-list { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
 .horse-row  { display:flex; align-items:center; background-color:#21252d; border-radius:8px; padding:10px 12px; }
-.h-num  { width:44px; height:44px; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:900; border-radius:6px; margin-right:14px; color:red; flex-shrink:0; }
+.h-num  { width:44px; height:44px; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:900; border-radius:6px; margin-right:14px; color:white; flex-shrink:0; }
 .rank-0 { background-color:#1D9E75; }
 .rank-1, .rank-2 { background-color:#EF9F27; }
 .rank-other { background-color:#4a4d55; }
