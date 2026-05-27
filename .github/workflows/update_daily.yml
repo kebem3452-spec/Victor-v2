@@ -46,18 +46,19 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
           python 3_entrainer_modele.py
-         
+          python 7_backtesting.py
       - name: Sauvegarder sur GitHub
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/
-          git diff-index --quiet HEAD || git commit -m "🤖 [Auto] Maj des statistiques du matin"
+          git fetch origin main
+          git merge origin/main --no-edit
+          git add data/ models/
+          git diff-index --quiet HEAD || git commit -m "🤖 [Auto] Maj des statistiques et modèles du matin"
           git push origin main
 
   # ───────────────────────────────────────────────────────────
   # 2. 09h05 UTC : sauvegarde pronostics définitifs
-  #    (après le gel des cotes à 09h00 Sénégal = 09h00 UTC)
   # ───────────────────────────────────────────────────────────
   sauvegarder-pronostics:
     if: |
@@ -75,9 +76,18 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: python 15_sauvegarder_pronostics.py
+      - name: Sauvegarder sur GitHub
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git merge origin/main --no-edit
+          git add data/
+          git diff-index --quiet HEAD || git commit -m "🤖 [Auto] Sauvegarde pronostics définitifs"
+          git push origin main
 
   # ───────────────────────────────────────────────────────────
-  # 3. SOIR 20h00 : résultats officiels
+  # 3. RÉSULTATS (12h00, 16h00, 20h00)
   # ───────────────────────────────────────────────────────────
   soir-resultats:
     if: |
@@ -99,8 +109,10 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git merge origin/main --no-edit
           git add data/
-          git diff-index --quiet HEAD || git commit -m "🤖 [Auto] Arrivées du soir"
+          git diff-index --quiet HEAD || git commit -m "🤖 [Auto] Arrivées collectées"
           git push origin main
 
   # ───────────────────────────────────────────────────────────
@@ -129,6 +141,8 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git merge origin/main --no-edit
           git add data/ models/
           git diff-index --quiet HEAD || git commit -m "🏆 [IA] Modèles hebdomadaires mis à jour"
           git push origin main
@@ -158,6 +172,8 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add models/
+          git fetch origin main
+          git merge origin/main --no-edit
+          git add data/ models/
           git diff-index --quiet HEAD || git commit -m "⚡ [Optuna] Optimisation mensuelle terminée"
           git push origin main
