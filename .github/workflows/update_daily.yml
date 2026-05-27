@@ -47,6 +47,7 @@ jobs:
         run: |
           python 6_maj_quotidienne.py
           python 2_feature_engineering.py
+          python 3_entrainer_modeles.py
       - name: Sauvegarder sur GitHub
         run: |
           git config --global user.name "github-actions[bot]"
