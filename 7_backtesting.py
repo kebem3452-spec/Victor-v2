@@ -1,19 +1,8 @@
 """
-VICTOR V2 — Étape 7 : Backtesting ROI v4
-=========================================
+VICTOR V2 — Étape 7 : Backtesting ROI v4.1 (Corrigé)
+======================================================
 Simule les 4 types de paris sur les 20% de données les plus récentes.
-Chaque stratégie est simulée de façon réaliste :
-
-- GAGNANT  : on mise sur le cheval N°1 de Victor. Gagné si place == 1.
-- COUPLE   : on mise sur le Top2 de Victor (dans l'ordre ou désordre).
-             Gagné si les 2 chevaux sont dans le vrai Top2.
-- TRIO     : on mise sur le Top3 de Victor.
-             Gagné si les 3 chevaux sont dans le vrai Top3.
-- QUINTE   : on mise sur le Top5 de Victor.
-             Gagné si au moins 4 des 5 chevaux sont dans le vrai Top5.
-
-Analogie : c'est comme rejouer toutes les courses passées avec de
-l'argent fictif pour voir si la stratégie aurait été rentable.
+Correction : Identification unique des courses par Date + Hippo + Numéro.
 """
 
 import pandas as pd
@@ -76,16 +65,30 @@ def calculer_probas(model, features, df):
 
 
 # ─────────────────────────────────────────────
-# IDENTIFICATION DES COURSES
+# IDENTIFICATION DES COURSES (CORRIGÉ 🚀)
 # ─────────────────────────────────────────────
 
 def identifier_courses(df):
-    df = df.sort_index().reset_index(drop=True)
-    df["course_id"] = (
-        (df["nb_partants"] != df["nb_partants"].shift()) |
-        (df["distance"]    != df["distance"].shift())    |
-        (df["taux_hippo"]  != df["taux_hippo"].shift())
-    ).cumsum()
+    df = df.copy()
+    
+    # On vérifie la présence des colonnes idéales
+    colonnes_id = ["date", "hippodrome", "num_course"]
+    
+    if all(col in df.columns for col in colonnes_id):
+        # Crée un ID unique du style "2026-05-25_VINCENNES_1"
+        df["course_id"] = df["date"].astype(str) + "_" + df["hippodrome"].astype(str) + "_" + df["num_course"].astype(str)
+    elif "date" in df.columns and "code_course" in df.columns:
+        df["course_id"] = df["date"].astype(str) + "_" + df["code_course"].astype(str)
+    else:
+        # Solution de secours améliorée si les colonnes manquent
+        print("⚠️ Attention : Colonnes date/hippo introuvables, utilisation du fallback.")
+        df = df.sort_index().reset_index(drop=True)
+        df["course_id"] = (
+            (df["nb_partants"] != df["nb_partants"].shift()) |
+            (df["distance"]    != df["distance"].shift())    |
+            (df["taux_hippo"]  != df["taux_hippo"].shift())
+        ).cumsum()
+        
     return df
 
 
@@ -101,7 +104,7 @@ def simuler_paris(df_test):
     - GAGNANT  : cote réelle du cheval
     - COUPLE   : cote_1 * cote_2 * 0.65  (approximation marché PMU)
     - TRIO     : cote_1 * cote_2 * cote_3 * 0.40
-    - QUINTE+  : gain fixe de 50x la mise si 5/5, 15x si 4/5
+    - QUINTE+  : gain fixe de 50x la mise si 5/5, 8x si 4/5
     """
     mise = 1.0
 
@@ -184,7 +187,7 @@ def simuler_paris(df_test):
 
 def afficher_resultats(stats, nb_courses):
     print("\n" + "="*60)
-    print("💰 RÉSULTATS DU BACKTESTING — VICTOR V2 v4")
+    print("💰 RÉSULTATS DU BACKTESTING — VICTOR V2 v4.1")
     print("="*60)
     print(f"  Courses analysées : {nb_courses}")
     print()
@@ -243,7 +246,7 @@ def afficher_resultats(stats, nb_courses):
 # ─────────────────────────────────────────────
 
 def main():
-    print("🏇 VICTOR V2 — BACKTESTING ROI v4")
+    print("🏇 VICTOR V2 — BACKTESTING ROI v4.1")
     print("="*60)
 
     model, features, df_test = charger_tout()
