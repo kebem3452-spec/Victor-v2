@@ -2,7 +2,7 @@
   "modeles": {
     "GLOBAL_quinte": {
       "fichier": "victor_v2_GLOBAL_quinte.pkl",
-      "auc": 0.7722,
+      "auc": 0.7723,
       "features": [
         "cote",
         "log_cote",
@@ -40,7 +40,7 @@
     },
     "GLOBAL_trio": {
       "fichier": "victor_v2_GLOBAL_trio.pkl",
-      "auc": 0.7825,
+      "auc": 0.782,
       "features": [
         "cote",
         "log_cote",
@@ -78,7 +78,7 @@
     },
     "GLOBAL_couple": {
       "fichier": "victor_v2_GLOBAL_couple.pkl",
-      "auc": 0.7933,
+      "auc": 0.7931,
       "features": [
         "cote",
         "log_cote",
@@ -154,7 +154,7 @@
     },
     "ATTELE_quinte": {
       "fichier": "victor_v2_ATTELE_quinte.pkl",
-      "auc": 0.7697,
+      "auc": 0.7694,
       "features": [
         "cote",
         "log_cote",
@@ -228,7 +228,7 @@
     },
     "HAIE_quinte": {
       "fichier": "victor_v2_HAIE_quinte.pkl",
-      "auc": 0.7586,
+      "auc": 0.7579,
       "features": [
         "cote",
         "log_cote",
@@ -265,7 +265,7 @@
     },
     "MONTE_quinte": {
       "fichier": "victor_v2_MONTE_quinte.pkl",
-      "auc": 0.7346,
+      "auc": 0.7339,
       "features": [
         "cote",
         "log_cote",
@@ -302,7 +302,7 @@
     },
     "PLAT_quinte": {
       "fichier": "victor_v2_PLAT_quinte.pkl",
-      "auc": 0.7799,
+      "auc": 0.7795,
       "features": [
         "cote",
         "log_cote",
@@ -339,7 +339,7 @@
     },
     "STEEPLECHASE_quinte": {
       "fichier": "victor_v2_STEEPLECHASE_quinte.pkl",
-      "auc": 0.7431,
+      "auc": 0.7465,
       "features": [
         "cote",
         "log_cote",
@@ -442,7 +442,7 @@
   ],
   "target": "succes",
   "n_features": 30,
-  "auc": 0.7722,
+  "auc": 0.7723,
   "disc_map": {
     "0": "ATTELE",
     "1": "CROSS",
