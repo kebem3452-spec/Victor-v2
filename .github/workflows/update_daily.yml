@@ -45,9 +45,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
-          python 6_maj_quotidienne.py
-          python 2_feature_engineering.py
-          python 3_entrainer_modeles.py
+          python 3_entrainer_modele.py
+         
       - name: Sauvegarder sur GitHub
         run: |
           git config --global user.name "github-actions[bot]"
